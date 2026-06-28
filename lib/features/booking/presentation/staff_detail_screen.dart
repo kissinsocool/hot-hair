@@ -54,7 +54,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
           role: data['role'] ?? '',
           experience: data['experience'] ?? '',
           extraServiceFee: _parseInt(data['extraServiceFee']),
-          imageUrl: data['imageUrl'] ?? '',
+          imageUrl: ApiClient.mediaUrl(data['imageUrl']?.toString() ?? ''),
           bio: data['bio'] ?? '',
           rating: (data['rating'] ?? 0.0).toDouble(),
           reviews: (data['reviews'] as List?)
@@ -85,7 +85,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
       role: data['role'] ?? '',
       experience: data['experience'] ?? '',
       extraServiceFee: _parseInt(data['extraServiceFee']),
-      imageUrl: data['imageUrl'] ?? '',
+      imageUrl: ApiClient.mediaUrl(data['imageUrl']?.toString() ?? ''),
       bio: data['bio'] ?? '',
       rating: (data['rating'] ?? 0.0).toDouble(),
       reviews: (data['reviews'] as List?)
@@ -110,7 +110,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
       comment: data['comment'] ?? '',
       date: data['date'] ?? '',
       imageUrls: (data['imageUrls'] as List?)
-              ?.map((item) => item.toString())
+              ?.map((item) => ApiClient.mediaUrl(item.toString()))
               .toList() ??
           [],
       merchantReply: replyContent,
@@ -127,7 +127,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
       id: data['id']?.toString() ?? '',
       name: data['name']?.toString() ?? '',
       durationMinutes: durationMinutes,
-      imageUrl: data['imageUrl']?.toString() ?? '',
+      imageUrl: ApiClient.mediaUrl(data['imageUrl']?.toString() ?? ''),
       note: data['note']?.toString() ?? '',
       priceLabel: data['price']?.toString() ?? '',
     );
@@ -177,8 +177,19 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
               child: Column(
                 children: [
                   CircleAvatar(
-                      radius: 70,
-                      backgroundImage: NetworkImage(staff.imageUrl)),
+                    radius: 70,
+                    backgroundImage: staff.imageUrl.startsWith('assets/')
+                        ? null
+                        : NetworkImage(staff.imageUrl),
+                    child: staff.imageUrl.startsWith('assets/')
+                        ? ClipOval(
+                            child: AppImages.placeholder(
+                              width: 140,
+                              height: 140,
+                            ),
+                          )
+                        : null,
+                  ),
                   SizedBox(height: 20),
                   Text(staff.name,
                       style: TextStyle(
@@ -361,8 +372,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                           width: 72,
                           height: 72,
                           color: Colors.grey[200],
-                          child: Icon(Icons.image_not_supported,
-                              color: Colors.grey),
+                          child: AppImages.placeholder(width: 72, height: 72),
                         ),
                       ),
                     ),

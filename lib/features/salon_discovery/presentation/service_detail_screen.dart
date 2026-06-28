@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/network/router.dart';
+import '../../../core/network/api_client.dart';
 
 class ServiceDetailScreen extends StatelessWidget {
   final String name;
@@ -37,7 +38,20 @@ class ServiceDetailScreen extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               height: 350,
-              child: Image.network(imageUrl, fit: BoxFit.cover),
+              child: imageUrl.isEmpty || imageUrl.startsWith('assets/')
+                  ? AppImages.placeholder(
+                      width: double.infinity,
+                      height: 350,
+                    )
+                  : Image.network(
+                      ApiClient.mediaUrl(imageUrl),
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) =>
+                          AppImages.placeholder(
+                        width: double.infinity,
+                        height: 350,
+                      ),
+                    ),
             ),
 
             Padding(

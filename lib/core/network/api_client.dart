@@ -21,6 +21,40 @@ class ApiClient {
     return 'http://$host:3000/api';
   }
 
+  static String mediaUrl(String value) {
+    final text = value.trim();
+    if (text.isEmpty ||
+        text.startsWith('assets/') ||
+        text.startsWith('data:') ||
+        text.startsWith('blob:')) {
+      return text;
+    }
+
+    final api = Uri.parse(_apiBaseUrl);
+    final origin = api.replace(path: '', query: null, fragment: null);
+    final uri = Uri.tryParse(text);
+    if (uri == null) return text;
+    if (!uri.hasScheme) {
+      return origin.resolve(text.startsWith('/') ? text : '/$text').toString();
+    }
+    if ((uri.scheme == 'http' || uri.scheme == 'https') &&
+        _isLoopback(uri.host) &&
+        !_isLoopback(api.host)) {
+      return uri
+          .replace(
+            scheme: api.scheme,
+            host: api.host,
+            port: api.hasPort ? api.port : null,
+          )
+          .toString();
+    }
+    return text;
+  }
+
+  static bool _isLoopback(String host) {
+    return host == 'localhost' || host == '127.0.0.1' || host == '0.0.0.0';
+  }
+
   // 统一请求处理，方便以后添加 Token 验证
   Future<Response> request(String path,
       {String method = 'GET',
