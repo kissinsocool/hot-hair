@@ -157,17 +157,10 @@ class _AuthScreenState extends State<AuthScreen> {
       borderRadius: BorderRadius.circular(8),
       child: Stack(
         children: [
-          Image.network(
-            SalonAssets.mainCover,
+          AppImages.placeholder(
             height: 260,
             width: double.infinity,
             fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) => Container(
-              height: 260,
-              color: AppTheme.accentBeige,
-              alignment: Alignment.center,
-              child: Icon(Icons.spa, color: AppTheme.textDark, size: 48),
-            ),
           ),
           Positioned.fill(
             child: DecoratedBox(

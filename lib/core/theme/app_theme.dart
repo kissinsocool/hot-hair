@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 class AppTheme {
   static const Color primaryPink = Color(0xFFE8A2B0);
@@ -12,7 +13,8 @@ class AppTheme {
       primaryColor: primaryPink,
       scaffoldBackgroundColor: bgCream,
       textTheme: TextTheme(
-        displayLarge: TextStyle(color: textDark, fontWeight: FontWeight.bold, fontSize: 24),
+        displayLarge: TextStyle(
+            color: textDark, fontWeight: FontWeight.bold, fontSize: 24),
         bodyLarge: TextStyle(color: textDark, fontSize: 16),
         bodyMedium: TextStyle(color: textDark, fontSize: 14),
       ),
@@ -20,7 +22,8 @@ class AppTheme {
         style: ElevatedButton.styleFrom(
           backgroundColor: primaryPink,
           foregroundColor: white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
           elevation: 0,
         ),
       ),
@@ -29,10 +32,25 @@ class AppTheme {
 }
 
 class SalonAssets {
-  static const String mainCover = 'https://images.unsplash.com/photo-1560066973-96f-8a32-655232396848?q=80&w=1000';
+  static const String placeholder = 'assets/images/salon_placeholder.svg';
   static const List<Map<String, String>> staffPhotos = [
-    {'name': 'Sato 先生', 'img': 'https://images.unsplash.com/photo-1500648767791-ced8051cb34c?q=80&w=200'},
-    {'name': 'Tanaka 女士', 'img': 'https://images.unsplash.com/photo-1438761681033-d1230ff0a285?q=80&w=200'},
-    {'name': 'Ken 先生', 'img': 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=200'},
+    {'name': 'Sato 先生', 'img': placeholder},
+    {'name': 'Tanaka 女士', 'img': placeholder},
+    {'name': 'Ken 先生', 'img': placeholder},
   ];
+}
+
+class AppImages {
+  static Widget placeholder({
+    double? width,
+    double? height,
+    BoxFit fit = BoxFit.cover,
+  }) {
+    return SvgPicture.asset(
+      SalonAssets.placeholder,
+      width: width,
+      height: height,
+      fit: fit,
+    );
+  }
 }

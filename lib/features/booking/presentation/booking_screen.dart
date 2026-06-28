@@ -283,6 +283,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
   Widget _buildStaffSelector(StaffProfile staff) {
     final isSelected = selectedStaffId == staff.id;
     final isNoPreference = staff.id == _noPreferenceStaffId;
+    final isAssetImage = staff.imageUrl.startsWith('assets/');
 
     return GestureDetector(
       onTap: () {
@@ -313,15 +314,23 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
               backgroundColor: isNoPreference
                   ? AppTheme.primaryPink.withOpacity(0.12)
                   : Colors.transparent,
-              backgroundImage:
-                  isNoPreference ? null : NetworkImage(staff.imageUrl),
+              backgroundImage: isNoPreference || isAssetImage
+                  ? null
+                  : NetworkImage(staff.imageUrl),
               child: isNoPreference
                   ? Icon(
                       Icons.question_mark,
                       color: AppTheme.primaryPink,
                       size: 30,
                     )
-                  : null,
+                  : isAssetImage
+                      ? ClipOval(
+                          child: AppImages.placeholder(
+                            width: 60,
+                            height: 60,
+                          ),
+                        )
+                      : null,
             ),
             SizedBox(width: 15),
             Expanded(
@@ -509,12 +518,12 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
         height: 72,
         color: Colors.grey[200],
         child: imageUrl.isEmpty
-            ? Icon(Icons.spa, color: Colors.grey[500])
+            ? AppImages.placeholder(width: 72, height: 72)
             : Image.network(
                 imageUrl,
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stackTrace) =>
-                    Icon(Icons.broken_image, color: Colors.grey[500]),
+                    AppImages.placeholder(width: 72, height: 72),
               ),
       ),
     );

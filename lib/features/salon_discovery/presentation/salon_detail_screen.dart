@@ -8,7 +8,6 @@ import '../data/salon_repository.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/top_snack_bar.dart';
 import '../../../features/booking/domain/staff_model.dart';
-import '../../../features/booking/domain/staff_experience_formatter.dart';
 import '../../../features/booking/presentation/staff_detail_screen.dart';
 
 class SalonDetailScreen extends StatefulWidget {
@@ -102,22 +101,22 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
             flexibleSpace: Stack(
               fit: StackFit.expand,
               children: [
-                CachedNetworkImage(
-                  imageUrl: coverImage,
-                  fit: BoxFit.cover,
-                  alignment: Alignment.topCenter,
-                  memCacheWidth: 1100,
-                  filterQuality: FilterQuality.low,
-                  fadeInDuration: Duration.zero,
-                  fadeOutDuration: Duration.zero,
-                  placeholder: (context, url) => Container(
-                    color: Colors.grey[200],
-                  ),
-                  errorWidget: (context, url, error) => Container(
-                    color: Colors.grey,
-                    child: Icon(Icons.broken_image, size: 50),
-                  ),
-                ),
+                coverImage.isEmpty
+                    ? AppImages.placeholder(width: double.infinity)
+                    : CachedNetworkImage(
+                        imageUrl: coverImage,
+                        fit: BoxFit.cover,
+                        alignment: Alignment.topCenter,
+                        memCacheWidth: 1100,
+                        filterQuality: FilterQuality.low,
+                        fadeInDuration: Duration.zero,
+                        fadeOutDuration: Duration.zero,
+                        placeholder: (context, url) => Container(
+                          color: Colors.grey[200],
+                        ),
+                        errorWidget: (context, url, error) =>
+                            AppImages.placeholder(width: double.infinity),
+                      ),
                 DecoratedBox(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
@@ -169,7 +168,7 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
                                 : '暂无营业时间',
                             style: TextStyle(
                               color: Colors.grey[400],
-                              fontSize: 12,
+                              fontSize: 14,
                             ),
                           ),
                         ],
@@ -329,7 +328,7 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
       role: staffData['role'] ?? (staffData['experience'] ?? '发型师'),
       experience: staffData['experience'] ?? '暂无经验描述',
       extraServiceFee: _parseInt(staffData['extraServiceFee']),
-      imageUrl: staffData['imageUrl'] ?? 'https://via.placeholder.com/210x280',
+      imageUrl: staffData['imageUrl'] ?? SalonAssets.placeholder,
       bio: staffData['bio'] ?? '暂无个人简介',
       rating: (staffData['rating'] ?? 0.0).toDouble(),
       reviews: staffReviews,
@@ -441,13 +440,7 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
 
     return Padding(
       padding: EdgeInsets.only(top: 8),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(15),
-        child: AspectRatio(
-          aspectRatio: 16 / 9,
-          child: _SalonDetailImageCarousel(images: promoImages),
-        ),
-      ),
+      child: _SalonDetailImageCarousel(images: promoImages),
     );
   }
 
@@ -461,7 +454,7 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
         SizedBox(width: 6),
         Text(
           '${rating.toStringAsFixed(1)} (${_salonReviewCount(salon)}人评分)',
-          style: TextStyle(color: Colors.grey[600]),
+          style: TextStyle(color: Colors.grey[600], fontSize: 16),
         ),
       ],
     );
@@ -551,7 +544,7 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
 
   String _coverImageUrl(Map<String, dynamic> salon) {
     final image = salon['image']?.toString().trim() ?? '';
-    return image.isNotEmpty ? image : 'https://via.placeholder.com/800x400';
+    return image;
   }
 
   List<String> _promoImageUrls(Map<String, dynamic> salon) {
@@ -894,27 +887,31 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
               ClipRRect(
                 borderRadius:
                     BorderRadius.vertical(top: Radius.circular(cardRadius)),
-                child: CachedNetworkImage(
-                  imageUrl: profile.imageUrl,
-                  width: cardWidth,
-                  height: imageHeight,
-                  fit: BoxFit.cover,
-                  memCacheWidth: 420,
-                  filterQuality: FilterQuality.low,
-                  fadeInDuration: Duration.zero,
-                  fadeOutDuration: Duration.zero,
-                  placeholder: (context, url) => Container(
-                    width: cardWidth,
-                    height: imageHeight,
-                    color: Colors.grey[200],
-                  ),
-                  errorWidget: (context, url, error) => Container(
-                    width: cardWidth,
-                    height: imageHeight,
-                    color: Colors.grey[300],
-                    child: Icon(Icons.person, color: Colors.grey, size: 28),
-                  ),
-                ),
+                child: profile.imageUrl.startsWith('assets/')
+                    ? AppImages.placeholder(
+                        width: cardWidth,
+                        height: imageHeight,
+                      )
+                    : CachedNetworkImage(
+                        imageUrl: profile.imageUrl,
+                        width: cardWidth,
+                        height: imageHeight,
+                        fit: BoxFit.cover,
+                        memCacheWidth: 420,
+                        filterQuality: FilterQuality.low,
+                        fadeInDuration: Duration.zero,
+                        fadeOutDuration: Duration.zero,
+                        placeholder: (context, url) => Container(
+                          width: cardWidth,
+                          height: imageHeight,
+                          color: Colors.grey[200],
+                        ),
+                        errorWidget: (context, url, error) =>
+                            AppImages.placeholder(
+                          width: cardWidth,
+                          height: imageHeight,
+                        ),
+                      ),
               ),
               Padding(
                 padding: EdgeInsets.all(4),
@@ -925,7 +922,7 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
                       profile.name,
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        fontSize: 13,
+                        fontSize: 15,
                         color: AppTheme.textDark,
                       ),
                       maxLines: 1,
@@ -935,8 +932,8 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
                     SizedBox(
                       height: 30,
                       child: Text(
-                        formatStaffExperience(profile.experience),
-                        style: TextStyle(color: Colors.grey[600], fontSize: 11),
+                        profile.role,
+                        style: TextStyle(color: Colors.grey[600], fontSize: 13),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -1050,7 +1047,7 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
         height: 76,
         color: Colors.grey[200],
         child: imageUrl.isEmpty
-            ? Icon(Icons.spa, color: Colors.grey[500])
+            ? AppImages.placeholder(width: 76, height: 76)
             : CachedNetworkImage(
                 imageUrl: imageUrl,
                 fit: BoxFit.cover,
@@ -1059,7 +1056,7 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
                 fadeInDuration: Duration.zero,
                 fadeOutDuration: Duration.zero,
                 errorWidget: (context, url, error) =>
-                    Icon(Icons.broken_image, color: Colors.grey[500]),
+                    AppImages.placeholder(width: 76, height: 76),
               ),
       ),
     );
@@ -1105,50 +1102,58 @@ class _SalonDetailImageCarouselState extends State<_SalonDetailImageCarousel> {
   @override
   Widget build(BuildContext context) {
     if (widget.images.length == 1) {
-      return _buildImage(widget.images.first);
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(15),
+        child: AspectRatio(
+          aspectRatio: 16 / 9,
+          child: _buildImage(widget.images.first),
+        ),
+      );
     }
 
-    return Stack(
-      fit: StackFit.expand,
+    return Column(
       children: [
-        ScrollConfiguration(
-          behavior: ScrollConfiguration.of(context).copyWith(
-            dragDevices: {
-              PointerDeviceKind.touch,
-              PointerDeviceKind.mouse,
-              PointerDeviceKind.trackpad,
-            },
-          ),
-          child: PageView.builder(
-            controller: _pageController,
-            itemCount: widget.images.length,
-            physics: BouncingScrollPhysics(),
-            onPageChanged: (index) => setState(() => _currentIndex = index),
-            itemBuilder: (context, index) => _buildImage(widget.images[index]),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(15),
+          child: AspectRatio(
+            aspectRatio: 16 / 9,
+            child: ScrollConfiguration(
+              behavior: ScrollConfiguration.of(context).copyWith(
+                dragDevices: {
+                  PointerDeviceKind.touch,
+                  PointerDeviceKind.mouse,
+                  PointerDeviceKind.trackpad,
+                },
+              ),
+              child: PageView.builder(
+                controller: _pageController,
+                itemCount: widget.images.length,
+                physics: BouncingScrollPhysics(),
+                onPageChanged: (index) => setState(() => _currentIndex = index),
+                itemBuilder: (context, index) =>
+                    _buildImage(widget.images[index]),
+              ),
+            ),
           ),
         ),
-        Positioned(
-          left: 0,
-          right: 0,
-          bottom: 12,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(widget.images.length, (index) {
-              final isActive = index == _currentIndex;
-              return AnimatedContainer(
-                duration: Duration(milliseconds: 180),
-                margin: EdgeInsets.symmetric(horizontal: 1.5),
-                width: isActive ? 16 : 6,
-                height: 6,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(
-                    alpha: isActive ? 0.95 : 0.65,
-                  ),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-              );
-            }),
-          ),
+        SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(widget.images.length, (index) {
+            final isActive = index == _currentIndex;
+            return AnimatedContainer(
+              duration: Duration(milliseconds: 180),
+              margin: EdgeInsets.symmetric(horizontal: 1.5),
+              width: isActive ? 16 : 6,
+              height: 6,
+              decoration: BoxDecoration(
+                color: isActive
+                    ? Colors.grey[800]
+                    : Colors.grey[800]!.withValues(alpha: 0.25),
+                borderRadius: BorderRadius.circular(999),
+              ),
+            );
+          }),
         ),
       ],
     );
@@ -1168,7 +1173,7 @@ class _SalonDetailImageCarouselState extends State<_SalonDetailImageCarousel> {
       ),
       errorWidget: (context, url, error) => Container(
         color: Colors.grey,
-        child: Icon(Icons.broken_image, size: 50),
+        child: AppImages.placeholder(),
       ),
     );
   }

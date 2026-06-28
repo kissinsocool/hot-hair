@@ -49,8 +49,7 @@ final List<StaffProfile> mockStaffList = [
     name: 'Sato 先生',
     role: '首席发型师',
     experience: '8年专业经验 | 擅长极简剪发与质感染发',
-    imageUrl:
-        'https://images.unsplash.com/photo-1500648767791-ced8051cb34c?q=80&w=200',
+    imageUrl: 'assets/images/salon_placeholder.svg',
     bio: '你好！我是 Sato。我致力于通过精准的剪裁和自然的色彩，挖掘每个人潜藏的独特气质。',
     rating: 4.8,
     reviews: [
@@ -71,8 +70,7 @@ final List<StaffProfile> mockStaffList = [
     name: 'Yumi 小姐',
     role: '创意总监',
     experience: '10年经验 | 擅长日系轻盈剪裁',
-    imageUrl:
-        'https://images.unsplash.com/photo-1438761681033-724816758d4b?q=80&w=200',
+    imageUrl: 'assets/images/salon_placeholder.svg',
     bio: '追求自然与流畅的线条感，让发型成为你穿搭的一部分。',
     rating: 4.9,
     reviews: [],
@@ -82,8 +80,7 @@ final List<StaffProfile> mockStaffList = [
     name: 'Ken 先生',
     role: '色彩专家',
     experience: '6年经验 | 专注于高明度色系',
-    imageUrl:
-        'https://images.unsplash.com/photo-1472099642232-ed44ee252772?q=80&w=200',
+    imageUrl: 'assets/images/salon_placeholder.svg',
     bio: '色彩是改变心情最快的方式。',
     rating: 4.7,
     reviews: [],

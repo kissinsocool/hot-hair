@@ -839,7 +839,7 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
         child: Column(
           children: [
             Container(
-              padding: EdgeInsets.only(left: 8, right: 4),
+              padding: EdgeInsets.only(left: 10),
               decoration: BoxDecoration(
                 color: AppTheme.white,
                 borderRadius: BorderRadius.circular(30),
@@ -847,29 +847,35 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
               child: TextField(
                 controller: _searchController,
                 focusNode: _searchFocusNode,
+                textAlignVertical: TextAlignVertical.center,
                 onChanged: _scheduleSearchSuggestions,
                 onSubmitted: (_) => _submitSalonSearch(),
                 decoration: InputDecoration(
                   hintText: '按名称搜索沙龙...',
+                  hintStyle: TextStyle(fontSize: 16, color: Colors.grey[700]),
                   border: InputBorder.none,
                   isDense: true,
-                  contentPadding: EdgeInsets.symmetric(vertical: 5),
+                  contentPadding: EdgeInsets.only(
+                    left: MediaQuery.sizeOf(context).width * 0.04,
+                    top: 5,
+                    bottom: 5,
+                  ),
                   suffixIconConstraints: const BoxConstraints(
-                    minWidth: 54,
-                    minHeight: 32,
+                    minWidth: 58,
+                    minHeight: 38,
                   ),
                   suffixIcon: Padding(
-                    padding: EdgeInsets.fromLTRB(0, 3, 3, 3),
+                    padding: EdgeInsets.fromLTRB(0, 4, 4, 4),
                     child: TextButton(
                       onPressed: _submitSalonSearch,
                       style: TextButton.styleFrom(
                         backgroundColor: AppTheme.primaryPink,
                         foregroundColor: AppTheme.white,
                         padding: EdgeInsets.symmetric(horizontal: 6),
-                        minimumSize: Size(46, 26),
+                        minimumSize: Size(55, 31),
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(13),
+                          borderRadius: BorderRadius.circular(15),
                         ),
                       ),
                       child: Text(
@@ -1934,7 +1940,7 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
 
   String _salonCoverImageUrl(Map<String, dynamic> salon) {
     final image = salon['image']?.toString().trim() ?? '';
-    return image.isNotEmpty ? image : 'https://via.placeholder.com/400x180';
+    return image;
   }
 
   Widget _buildSalonImage(
@@ -1943,8 +1949,13 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
     double width = double.infinity,
     int memCacheWidth = 900,
   }) {
+    final imageUrl = _salonCoverImageUrl(salon);
+    if (imageUrl.isEmpty) {
+      return AppImages.placeholder(width: width, height: height);
+    }
+
     return CachedNetworkImage(
-      imageUrl: _salonCoverImageUrl(salon),
+      imageUrl: imageUrl,
       height: height,
       width: width,
       fit: BoxFit.cover,
@@ -1962,7 +1973,7 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
         height: height,
         width: width,
         color: Colors.grey,
-        child: Icon(Icons.broken_image),
+        child: AppImages.placeholder(width: width, height: height),
       ),
     );
   }
