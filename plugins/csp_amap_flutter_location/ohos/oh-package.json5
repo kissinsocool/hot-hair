@@ -1,0 +1,13 @@
+{
+  "name": "csp_amap_flutter_location",
+  "version": "1.0.0",
+  "description": "Please describe the basic information.",
+  "main": "index.ets",
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@ohos/flutter_ohos": "file:./har/flutter.har",
+    "@amap/amap_lbs_common": ">=1.2.0",
+    "@amap/amap_lbs_location": ">=1.2.0"
+  }
+}

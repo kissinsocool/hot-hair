@@ -2,6 +2,7 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter/material.dart';
 import '../../features/salon_discovery/presentation/salon_detail_screen.dart';
 import '../../features/salon_discovery/presentation/salon_home_screen.dart';
+import '../../features/salon_discovery/presentation/location_picker_screen.dart';
 import '../../features/booking/presentation/booking_screen.dart';
 import '../../features/booking/presentation/staff_detail_screen.dart';
 import '../../features/booking/presentation/confirm_booking_screen.dart';
@@ -16,6 +17,7 @@ class AppRouter {
   static const String staffDetail = '/staff';
   static const String confirm = '/confirm';
   static const String userMessages = '/booking-messages';
+  static const String locationPicker = '/location-picker';
 
   static final GoRouter router = GoRouter(
     initialLocation: home,
@@ -37,6 +39,22 @@ class AppRouter {
         },
       ),
       GoRoute(path: home, builder: (context, state) => const SalonHomeScreen()),
+      GoRoute(
+        name: 'location_picker',
+        path: locationPicker,
+        builder: (context, state) {
+          final currentAddress = state.uri.queryParameters['current'] ?? '';
+          final latitude =
+              double.tryParse(state.uri.queryParameters['latitude'] ?? '');
+          final longitude =
+              double.tryParse(state.uri.queryParameters['longitude'] ?? '');
+          return LocationPickerScreen(
+            currentAddress: currentAddress,
+            initialLatitude: latitude,
+            initialLongitude: longitude,
+          );
+        },
+      ),
       GoRoute(
         path: serviceDetail,
         builder: (context, state) {

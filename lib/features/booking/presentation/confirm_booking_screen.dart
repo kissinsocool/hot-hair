@@ -25,8 +25,13 @@ class ConfirmBookingScreen extends ConsumerWidget {
         elevation: 0,
         iconTheme: IconThemeData(color: AppTheme.textDark),
       ),
-      body: Padding(
-        padding: EdgeInsets.all(24),
+      body: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          12,
+          12,
+          12,
+          MediaQuery.sizeOf(context).height * 0.2,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -37,7 +42,7 @@ class ConfirmBookingScreen extends ConsumerWidget {
                     color: AppTheme.textDark)),
             SizedBox(height: 20),
             Container(
-              padding: EdgeInsets.all(20),
+              padding: EdgeInsets.all(10),
               decoration: BoxDecoration(
                 color: AppTheme.white,
                 borderRadius: BorderRadius.circular(20),
@@ -160,7 +165,7 @@ class ConfirmBookingScreen extends ConsumerWidget {
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
         builder: (context) => Container(
-          padding: EdgeInsets.all(30),
+          padding: EdgeInsets.all(15),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [

@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/top_snack_bar.dart';
 import '../data/user_auth_repository.dart';
 
 class AuthScreen extends StatefulWidget {
@@ -47,7 +48,7 @@ class _AuthScreenState extends State<AuthScreen> {
         _debugCode = debugCode;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('验证码已发送')),
+        topSnackBar(context, '验证码已发送'),
       );
     } catch (error) {
       _showError(error, fallback: '验证码发送失败，请稍后重试');
@@ -67,7 +68,7 @@ class _AuthScreenState extends State<AuthScreen> {
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('登录成功')),
+        topSnackBar(context, '登录成功'),
       );
       widget.onAuthenticated(session);
     } catch (error) {
@@ -81,7 +82,7 @@ class _AuthScreenState extends State<AuthScreen> {
     final phone = _phone;
     if (!RegExp(r'^1\d{10}$').hasMatch(phone)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('请输入有效的手机号')),
+        topSnackBar(context, '请输入有效的手机号'),
       );
       return false;
     }
@@ -96,7 +97,7 @@ class _AuthScreenState extends State<AuthScreen> {
         : null;
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message ?? fallback)),
+      topSnackBar(context, message ?? fallback),
     );
   }
 
@@ -121,7 +122,7 @@ class _AuthScreenState extends State<AuthScreen> {
           builder: (context, constraints) {
             final isWide = constraints.maxWidth >= 720;
             return SingleChildScrollView(
-              padding: EdgeInsets.all(isWide ? 32 : 20),
+              padding: EdgeInsets.all(isWide ? 16 : 10),
               child: Center(
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 920),
@@ -209,7 +210,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
   Widget _buildFormPanel() {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: AppTheme.white,
         borderRadius: BorderRadius.circular(8),
@@ -365,7 +366,7 @@ class _AuthScreenState extends State<AuthScreen> {
       labelText: label,
       prefixIcon: Icon(icon),
       isDense: true,
-      contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 15),
+      contentPadding: EdgeInsets.symmetric(horizontal: 7, vertical: 7.5),
       filled: true,
       fillColor: AppTheme.bgCream,
       border: OutlineInputBorder(

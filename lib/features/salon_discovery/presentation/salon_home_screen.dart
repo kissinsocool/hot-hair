@@ -2,13 +2,16 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/network/router.dart';
+import '../../../core/widgets/top_snack_bar.dart';
 import '../../auth/data/user_auth_repository.dart';
 import '../../auth/data/user_session_store.dart';
 import '../../booking/data/booking_message_read_store.dart';
@@ -17,7 +20,10 @@ import '../../booking/data/review_repository.dart';
 import '../../booking/data/booking_update_stream.dart';
 import '../../booking/domain/booking_order.dart';
 import '../data/favorite_salon_store.dart';
+import '../data/location_position_service.dart';
+import '../data/location_reverse_geocode_repository.dart';
 import '../data/salon_repository.dart';
+import 'location_address_formatter.dart';
 import 'salon_address_formatter.dart';
 
 class SalonHomeScreen extends StatefulWidget {
@@ -27,52 +33,44 @@ class SalonHomeScreen extends StatefulWidget {
   State<SalonHomeScreen> createState() => _SalonHomeScreenState();
 }
 
-class _CityLocation {
-  final String name;
-  final double latitude;
-  final double longitude;
-
-  const _CityLocation(this.name, this.latitude, this.longitude);
-}
-
 class _SalonHomeScreenState extends State<SalonHomeScreen> {
-  static const List<_CityLocation> _knownCities = [
-    _CityLocation('上海市', 31.2304, 121.4737),
-    _CityLocation('北京市', 39.9042, 116.4074),
-    _CityLocation('广州市', 23.1291, 113.2644),
-    _CityLocation('深圳市', 22.5431, 114.0579),
-    _CityLocation('杭州市', 30.2741, 120.1551),
-    _CityLocation('南京市', 32.0603, 118.7969),
-    _CityLocation('苏州市', 31.2989, 120.5853),
-    _CityLocation('成都市', 30.5728, 104.0668),
-    _CityLocation('重庆市', 29.563, 106.5516),
-    _CityLocation('武汉市', 30.5928, 114.3055),
-    _CityLocation('西安市', 34.3416, 108.9398),
-    _CityLocation('天津市', 39.3434, 117.3616),
-  ];
+  static bool _hasRequestedInitialLocationForSession = false;
+  static Position? _cachedUserPosition;
+  static String? _cachedLocationMessage;
 
   final SalonRepository _salonRepository = SalonRepository();
+  final LocationReverseGeocodeRepository _locationRepository =
+      LocationReverseGeocodeRepository();
   final OrderRepository _orderRepository = OrderRepository();
   final ReviewRepository _reviewRepository = ReviewRepository();
   final UserAuthRepository _authRepository = UserAuthRepository();
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
+  final LayerLink _searchFieldLayerLink = LayerLink();
+  final GlobalKey _searchFieldKey = GlobalKey();
   final TextEditingController _profileNameController = TextEditingController();
   final TextEditingController _profilePhoneController = TextEditingController();
   final DateFormat _dateFormat = DateFormat('yyyy-MM-dd HH:mm');
   StreamSubscription<Map<String, dynamic>>? _bookingUpdateSubscription;
+  OverlayEntry? _searchSuggestionsOverlay;
   int _selectedTabIndex = 0;
   bool _isLoading = true;
   bool _hasBookingMessages = false;
   String? _latestBookingMessageKey;
   List<Map<String, dynamic>> _salons = [];
   List<BookingOrder> _bookingOrders = [];
+  List<Map<String, dynamic>> _searchSuggestionSalons = [];
   final Set<String> _reviewedOrderIds = {};
   final Set<String> _complainedOrderIds = {};
   String _errorMessage = '';
   String _searchKeyword = '';
-  String? _locatedCity;
-  String _locationMessage = '定位后优先展示同城沙龙';
-  bool _isLocating = false;
+  String _searchDraft = '';
+  bool _isLoadingSearchSuggestions = false;
+  Timer? _searchSuggestionDebounce;
+  int _searchSuggestionRequestId = 0;
+  double _searchFieldWidth = 0;
+  Position? _userPosition;
+  String _locationMessage = '定位后按距离展示附近沙龙';
   ClientAuthSession? _profileSession = UserSessionStore.currentSession;
   String _profileGender = '保密';
   String _profileAvatarUrl = '';
@@ -87,20 +85,28 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
             return name.contains(keyword);
           }).toList();
 
-    if (_locatedCity == null) return source;
-    source.sort((left, right) {
-      final leftMatch = _isSalonInLocatedCity(left) ? 0 : 1;
-      final rightMatch = _isSalonInLocatedCity(right) ? 0 : 1;
-      return leftMatch.compareTo(rightMatch);
-    });
+    if (_userPosition != null) {
+      source.sort((left, right) {
+        final leftDistance = _salonDistanceMeters(left) ?? double.infinity;
+        final rightDistance = _salonDistanceMeters(right) ?? double.infinity;
+        return leftDistance.compareTo(rightDistance);
+      });
+      return source;
+    }
+
     return source;
   }
 
   @override
   void initState() {
     super.initState();
+    _searchFocusNode.addListener(_handleSearchFocusChanged);
     _syncProfileControllers();
+    _restoreCachedLocation();
     _loadSalons();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _locateUserOnceOnOpen();
+    });
     _loadBookingMessageStatus();
     BookingUpdateStream.instance.start();
     _bookingUpdateSubscription =
@@ -115,6 +121,9 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
   @override
   void dispose() {
     _bookingUpdateSubscription?.cancel();
+    _searchSuggestionDebounce?.cancel();
+    _removeSearchSuggestionsOverlay();
+    _searchFocusNode.dispose();
     _searchController.dispose();
     _profileNameController.dispose();
     _profilePhoneController.dispose();
@@ -199,95 +208,186 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
 
   void _showSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
+      topSnackBar(context, message),
     );
   }
 
-  Future<void> _locateUser() async {
+  void _handleSearchFocusChanged() {
+    if (_searchFocusNode.hasFocus) {
+      if (_searchController.text.trim().isNotEmpty) {
+        _scheduleSearchSuggestions(_searchController.text);
+      } else {
+        _syncSearchSuggestionsOverlay();
+      }
+    } else {
+      _removeSearchSuggestionsOverlay();
+    }
+  }
+
+  void _restoreCachedLocation() {
+    final cachedMessage = _cachedLocationMessage;
+    if (cachedMessage == null) return;
+
+    _userPosition = _cachedUserPosition;
+    _locationMessage = cachedMessage;
+  }
+
+  void _cacheCurrentLocationState() {
+    _cachedUserPosition = _userPosition;
+    _cachedLocationMessage = _locationMessage;
+  }
+
+  void _locateUserOnceOnOpen() {
+    if (!mounted || _hasRequestedInitialLocationForSession) return;
+    _hasRequestedInitialLocationForSession = true;
+    _locateUser(showFailureSnackBar: false);
+  }
+
+  Future<void> _locateUser({bool showFailureSnackBar = true}) async {
     setState(() {
-      _isLocating = true;
       _locationMessage = '正在获取当前位置...';
+      _cacheCurrentLocationState();
     });
 
     try {
-      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        if (!mounted) return;
-        setState(() {
-          _locationMessage = '定位服务未开启';
-          _isLocating = false;
-        });
-        _showSnackBar('请先开启系统定位服务');
-        return;
-      }
-
-      var permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-      if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
-        if (!mounted) return;
-        setState(() {
-          _locationMessage = '未获得定位权限';
-          _isLocating = false;
-        });
-        _showSnackBar('需要定位权限才能按位置推荐沙龙');
-        return;
-      }
-
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.medium,
-        ),
-      );
-      final city = _nearestKnownCity(position.latitude, position.longitude);
+      final position = await LocationPositionService.currentPosition();
+      final accuracyLabel = _formatLocationAccuracy(position.accuracy);
+      final locationMessage = '已获取当前位置$accuracyLabel，附近沙龙优先';
+      _cachedUserPosition = position;
+      _cachedLocationMessage = locationMessage;
       if (!mounted) return;
       setState(() {
-        _locatedCity = city.name;
-        _locationMessage = '已定位到${city.name}，同城沙龙优先';
-        _isLocating = false;
+        _userPosition = position;
+        _locationMessage = locationMessage;
       });
-    } catch (_) {
+      unawaited(_refreshCurrentAddress(position));
+    } catch (error) {
+      _cachedUserPosition = null;
+      _cachedLocationMessage = '定位失败，继续展示全部沙龙';
       if (!mounted) return;
       setState(() {
         _locationMessage = '定位失败，继续展示全部沙龙';
-        _isLocating = false;
       });
-      _showSnackBar('定位失败，请稍后重试');
+      if (showFailureSnackBar) _showSnackBar(error.toString());
     }
   }
 
-  _CityLocation _nearestKnownCity(double latitude, double longitude) {
-    var nearest = _knownCities.first;
-    var nearestDistance = double.infinity;
-    for (final city in _knownCities) {
-      final distance = Geolocator.distanceBetween(
-        latitude,
-        longitude,
-        city.latitude,
-        city.longitude,
+  Future<void> _refreshCurrentAddress(Position position) async {
+    final addressLabel = await _formatCurrentAddress(position);
+    if (addressLabel == null || !mounted) return;
+    final currentPosition = _userPosition;
+    if (currentPosition == null ||
+        currentPosition.latitude != position.latitude ||
+        currentPosition.longitude != position.longitude) {
+      return;
+    }
+
+    final locationMessage = formatLocationLeafAddress(addressLabel);
+    setState(() {
+      _locationMessage = locationMessage;
+      _cacheCurrentLocationState();
+    });
+  }
+
+  Future<String?> _formatCurrentAddress(Position position) async {
+    try {
+      final address = await _locationRepository.reverseGeocode(
+        latitude: position.latitude,
+        longitude: position.longitude,
       );
-      if (distance < nearestDistance) {
-        nearest = city;
-        nearestDistance = distance;
-      }
+      if (address != null && address.isNotEmpty) return address;
+    } catch (_) {
+      // Fall back to the platform geocoder below.
     }
-    return nearest;
+
+    try {
+      final placemarks = await placemarkFromCoordinates(
+        position.latitude,
+        position.longitude,
+      );
+      if (placemarks.isEmpty) return null;
+
+      final address = formatPlacemarkAddress(placemarks.first);
+      return address.isEmpty ? null : address;
+    } catch (_) {
+      return null;
+    }
   }
 
-  bool _isSalonInLocatedCity(Map<String, dynamic> salon) {
-    final city = _locatedCity;
-    if (city == null) return false;
-    final region = salon['addressRegion'];
-    final values = <String>[
-      salon['address']?.toString() ?? '',
-      if (region is Map) ...[
-        region['cityName']?.toString() ?? '',
-        region['provinceName']?.toString() ?? '',
-      ],
-    ];
-    return values.any((value) => value.contains(city));
+  Future<void> _openLocationPicker() async {
+    final selection = await context.pushNamed<Map<String, dynamic>>(
+      'location_picker',
+      queryParameters: {
+        'current': _locationMessage,
+        if (_userPosition != null) ...{
+          'latitude': _userPosition!.latitude.toString(),
+          'longitude': _userPosition!.longitude.toString(),
+        },
+      },
+    );
+    final address = selection?['address']?.toString().trim();
+    if (!mounted || address == null || address.isEmpty) return;
+    setState(() {
+      _locationMessage = formatLocationLeafAddress(address);
+      final latitude =
+          double.tryParse(selection?['latitude']?.toString() ?? '');
+      final longitude =
+          double.tryParse(selection?['longitude']?.toString() ?? '');
+      if (latitude != null && longitude != null) {
+        _userPosition = Position(
+          latitude: latitude,
+          longitude: longitude,
+          timestamp: DateTime.now(),
+          accuracy:
+              double.tryParse(selection?['accuracy']?.toString() ?? '') ?? 0,
+          altitude: 0,
+          altitudeAccuracy: 0,
+          heading: 0,
+          headingAccuracy: 0,
+          speed: 0,
+          speedAccuracy: 0,
+        );
+      }
+      _cacheCurrentLocationState();
+    });
+  }
+
+  double? _salonDistanceMeters(Map<String, dynamic> salon) {
+    final position = _userPosition;
+    if (position == null) return null;
+
+    final location = salon['location'];
+    if (location is! Map) return null;
+    final latitude = double.tryParse(location['latitude']?.toString() ?? '');
+    final longitude = double.tryParse(location['longitude']?.toString() ?? '');
+    if (latitude == null || longitude == null) return null;
+
+    return Geolocator.distanceBetween(
+      position.latitude,
+      position.longitude,
+      latitude,
+      longitude,
+    );
+  }
+
+  String? _formatSalonDistance(Map<String, dynamic> salon) {
+    final distanceMeters = _salonDistanceMeters(salon);
+    if (distanceMeters == null) return null;
+
+    if (distanceMeters < 1000) {
+      final roundedMeters = (distanceMeters / 10).round() * 10;
+      return '距离你 ${roundedMeters.clamp(10, 990)} m';
+    }
+
+    return '距离你 ${(distanceMeters / 1000).toStringAsFixed(1)} km';
+  }
+
+  String _formatLocationAccuracy(double accuracyMeters) {
+    if (!accuracyMeters.isFinite || accuracyMeters <= 0) return '';
+    if (accuracyMeters >= 1000) {
+      return '（精度约${(accuracyMeters / 1000).toStringAsFixed(1)}km，请开启精确位置）';
+    }
+    return '（精度约${accuracyMeters.round()}m）';
   }
 
   Future<void> _loadSalons() async {
@@ -307,6 +407,253 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
         _isLoading = false;
       });
     }
+  }
+
+  void _scheduleSearchSuggestions(String value) {
+    _searchSuggestionDebounce?.cancel();
+    final keyword = value.trim();
+    _searchDraft = keyword;
+
+    if (keyword.isEmpty) {
+      setState(() {
+        _isLoadingSearchSuggestions = false;
+        _searchSuggestionSalons = [];
+      });
+      _removeSearchSuggestionsOverlay();
+      return;
+    }
+
+    setState(() {
+      _isLoadingSearchSuggestions = true;
+      _searchSuggestionSalons = [];
+    });
+    _syncSearchSuggestionsOverlay();
+    _searchSuggestionDebounce = Timer(
+      Duration(milliseconds: 250),
+      () => _loadSearchSuggestions(keyword),
+    );
+  }
+
+  Future<void> _loadSearchSuggestions(String keyword) async {
+    final requestId = ++_searchSuggestionRequestId;
+
+    try {
+      final remoteSuggestions = await _salonRepository.fetchSalonSuggestions(
+        keyword: keyword,
+        latitude: _userPosition?.latitude,
+        longitude: _userPosition?.longitude,
+      );
+      final suggestions = remoteSuggestions.isEmpty
+          ? _localSalonSuggestions(keyword)
+          : remoteSuggestions;
+
+      if (!mounted || requestId != _searchSuggestionRequestId) return;
+      if (_searchDraft != keyword) return;
+
+      setState(() {
+        _isLoadingSearchSuggestions = false;
+        _searchSuggestionSalons = suggestions;
+      });
+      _syncSearchSuggestionsOverlay();
+    } catch (_) {
+      if (!mounted || requestId != _searchSuggestionRequestId) return;
+      if (_searchDraft != keyword) return;
+
+      setState(() {
+        _isLoadingSearchSuggestions = false;
+        _searchSuggestionSalons = _localSalonSuggestions(keyword);
+      });
+      _syncSearchSuggestionsOverlay();
+    }
+  }
+
+  List<Map<String, dynamic>> _localSalonSuggestions(String keyword) {
+    final normalizedKeyword = keyword.trim().toLowerCase();
+    if (normalizedKeyword.isEmpty) return [];
+
+    final matches = _salons.where((salon) {
+      final name = (salon['name'] ?? '').toString().toLowerCase();
+      return name.contains(normalizedKeyword);
+    }).toList();
+
+    if (_userPosition != null) {
+      matches.sort((left, right) {
+        final leftDistance = _salonDistanceMeters(left) ?? double.infinity;
+        final rightDistance = _salonDistanceMeters(right) ?? double.infinity;
+        return leftDistance.compareTo(rightDistance);
+      });
+    }
+
+    return matches.take(5).toList();
+  }
+
+  bool get _shouldShowSearchSuggestionsOverlay {
+    if (!_searchFocusNode.hasFocus) return false;
+    if (_selectedTabIndex != 0) return false;
+    if (_searchDraft.isEmpty) return false;
+    return _isLoadingSearchSuggestions || _searchSuggestionSalons.isNotEmpty;
+  }
+
+  void _syncSearchSuggestionsOverlay() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final renderBox =
+          _searchFieldKey.currentContext?.findRenderObject() as RenderBox?;
+      if (renderBox != null && renderBox.hasSize) {
+        _searchFieldWidth = renderBox.size.width;
+      }
+
+      if (!_shouldShowSearchSuggestionsOverlay) {
+        _removeSearchSuggestionsOverlay();
+        return;
+      }
+
+      if (_searchSuggestionsOverlay == null) {
+        _searchSuggestionsOverlay = OverlayEntry(
+          builder: (context) => _buildSearchSuggestionsOverlay(),
+        );
+        Overlay.of(context).insert(_searchSuggestionsOverlay!);
+      } else {
+        _searchSuggestionsOverlay!.markNeedsBuild();
+      }
+    });
+  }
+
+  void _removeSearchSuggestionsOverlay() {
+    _searchSuggestionsOverlay?.remove();
+    _searchSuggestionsOverlay = null;
+  }
+
+  Widget _buildSearchSuggestionsOverlay() {
+    final fallbackWidth = (MediaQuery.sizeOf(context).width - 20) * 0.98;
+    final panelWidth =
+        _searchFieldWidth > 0 ? _searchFieldWidth : fallbackWidth;
+
+    return Positioned.fill(
+      child: CompositedTransformFollower(
+        link: _searchFieldLayerLink,
+        showWhenUnlinked: false,
+        targetAnchor: Alignment.bottomCenter,
+        followerAnchor: Alignment.topCenter,
+        offset: const Offset(0, 6),
+        child: Material(
+          color: Colors.transparent,
+          child: UnconstrainedBox(
+            alignment: Alignment.topCenter,
+            child: SizedBox(
+              width: panelWidth,
+              child: _buildSearchSuggestionPanel(),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchSuggestionPanel() {
+    return Container(
+      constraints: const BoxConstraints(maxHeight: 180),
+      decoration: BoxDecoration(
+        color: AppTheme.white,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: AppTheme.accentBeige),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 10,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: _isLoadingSearchSuggestions
+          ? Padding(
+              padding: EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 15,
+                      height: 15,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppTheme.primaryPink,
+                      ),
+                    ),
+                    SizedBox(width: 7),
+                    Text('加载中', style: TextStyle(color: Colors.grey[600])),
+                  ],
+                ),
+              ),
+            )
+          : ListView(
+              padding: EdgeInsets.zero,
+              shrinkWrap: true,
+              children: _searchSuggestionSalons
+                  .map((salon) => _buildSearchSuggestionItem(salon))
+                  .toList(),
+            ),
+    );
+  }
+
+  Widget _buildSearchSuggestionItem(Map<String, dynamic> salon) {
+    final name = salon['name']?.toString() ?? '';
+    final distanceLabel = _formatSalonDistance(salon);
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (_) => _selectSearchSuggestion(name),
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              name.isEmpty ? '未知沙龙' : name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: AppTheme.textDark,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            SizedBox(height: 4),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    formatSalonCityAddress(salon),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(color: Colors.grey, fontSize: 13),
+                  ),
+                ),
+                if (distanceLabel != null) ...[
+                  SizedBox(width: 8),
+                  Text(
+                    distanceLabel,
+                    style: TextStyle(
+                      color: AppTheme.primaryPink,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _selectSearchSuggestion(String name) {
+    _searchController.text = name;
+    _searchController.selection = TextSelection.collapsed(offset: name.length);
+    _submitSalonSearch();
   }
 
   Future<void> _loadBookingMessageStatus() async {
@@ -330,8 +677,13 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
   }
 
   void _selectTab(int index) {
+    if (index != 0) {
+      _removeSearchSuggestionsOverlay();
+      _searchFocusNode.unfocus();
+    }
+
     if (index == 2) {
-      BookingMessageReadStore.markRead(_latestBookingMessageKey);
+      unawaited(BookingMessageReadStore.markRead(_latestBookingMessageKey));
       setState(() {
         _selectedTabIndex = index;
         _hasBookingMessages = false;
@@ -346,23 +698,24 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
   @override
   Widget build(BuildContext context) {
     final filteredSalons = _filteredSalons;
-    final titles = ['探索沙龙', '收藏', '我的订单', '我'];
+    final titles = ['', '收藏', '我的订单', '我'];
 
     return Scaffold(
       backgroundColor: AppTheme.bgCream,
       appBar: AppBar(
-        backgroundColor: AppTheme.white,
+        backgroundColor: AppTheme.primaryPink,
         elevation: 0,
-        title: Text(titles[_selectedTabIndex],
-            style: TextStyle(
-                color: AppTheme.textDark, fontWeight: FontWeight.bold)),
+        iconTheme: const IconThemeData(color: AppTheme.white),
+        title: _selectedTabIndex == 0
+            ? _buildLocationModule()
+            : Text(titles[_selectedTabIndex],
+                style: TextStyle(
+                    color: AppTheme.white, fontWeight: FontWeight.bold)),
         centerTitle: false,
         actions: [
           IconButton(
             tooltip: '预约消息',
             onPressed: () async {
-              BookingMessageReadStore.markRead(_latestBookingMessageKey);
-              setState(() => _hasBookingMessages = false);
               await context.push(AppRouter.userMessages);
               if (!mounted) return;
               _loadBookingMessageStatus();
@@ -370,6 +723,21 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
             icon: _buildNotificationIcon(),
           ),
         ],
+        bottom: _selectedTabIndex == 0
+            ? PreferredSize(
+                preferredSize: Size.fromHeight(58),
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(10, 0, 10, 5),
+                  child: Transform.translate(
+                    offset: const Offset(0, -8),
+                    child: FractionallySizedBox(
+                      widthFactor: 0.98,
+                      child: _buildSearchField(),
+                    ),
+                  ),
+                ),
+              )
+            : null,
       ),
       body: IndexedStack(
         index: _selectedTabIndex,
@@ -412,107 +780,188 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
   }
 
   Widget _buildExploreTab(List<Map<String, dynamic>> filteredSalons) {
-    return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(20, 20, 20, 28),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: EdgeInsets.symmetric(horizontal: 15),
-            decoration: BoxDecoration(
-              color: AppTheme.white,
-              borderRadius: BorderRadius.circular(30),
-              border: Border.all(color: AppTheme.accentBeige),
-            ),
-            child: TextField(
-              controller: _searchController,
-              onChanged: (value) => setState(() => _searchKeyword = value),
-              decoration: InputDecoration(
-                icon: Icon(Icons.search, color: Colors.grey),
-                hintText: '按名称搜索沙龙...',
-                border: InputBorder.none,
-                suffixIcon: _searchKeyword.isEmpty
-                    ? null
-                    : IconButton(
-                        tooltip: '清除搜索',
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() => _searchKeyword = '');
-                        },
-                        icon: Icon(Icons.close, color: Colors.grey[500]),
+    final headerCount =
+        _isLoading || _errorMessage.isNotEmpty || filteredSalons.isEmpty
+            ? 1
+            : 0;
+    final itemCount = 2 + headerCount + filteredSalons.length;
+
+    return Column(
+      children: [
+        Expanded(
+          child: ListView.builder(
+            padding: EdgeInsets.fromLTRB(10, 10, 10, 14),
+            cacheExtent: 420,
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            itemCount: itemCount,
+            itemBuilder: (context, index) {
+              if (index == 0) {
+                return Text(_userPosition == null ? '推荐沙龙' : '附近的店铺',
+                    style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.textDark));
+              }
+              if (index == 1) return SizedBox(height: 15);
+
+              final contentIndex = index - 2;
+              if (_isLoading) {
+                return Center(
+                    child:
+                        CircularProgressIndicator(color: AppTheme.primaryPink));
+              }
+              if (_errorMessage.isNotEmpty) {
+                return Center(
+                  child: Column(
+                    children: [
+                      Text('加载失败: $_errorMessage',
+                          style: TextStyle(color: Colors.red)),
+                      TextButton(onPressed: _loadSalons, child: Text('重新加载'))
+                    ],
+                  ),
+                );
+              }
+              if (filteredSalons.isEmpty) return _buildEmptySearchResult();
+
+              return _buildSalonCard(filteredSalons[contentIndex], context);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSearchField() {
+    return CompositedTransformTarget(
+      link: _searchFieldLayerLink,
+      child: Container(
+        key: _searchFieldKey,
+        child: Column(
+          children: [
+            Container(
+              padding: EdgeInsets.only(left: 8, right: 4),
+              decoration: BoxDecoration(
+                color: AppTheme.white,
+                borderRadius: BorderRadius.circular(30),
+              ),
+              child: TextField(
+                controller: _searchController,
+                focusNode: _searchFocusNode,
+                onChanged: _scheduleSearchSuggestions,
+                onSubmitted: (_) => _submitSalonSearch(),
+                decoration: InputDecoration(
+                  hintText: '按名称搜索沙龙...',
+                  border: InputBorder.none,
+                  isDense: true,
+                  contentPadding: EdgeInsets.symmetric(vertical: 5),
+                  suffixIconConstraints: const BoxConstraints(
+                    minWidth: 54,
+                    minHeight: 32,
+                  ),
+                  suffixIcon: Padding(
+                    padding: EdgeInsets.fromLTRB(0, 3, 3, 3),
+                    child: TextButton(
+                      onPressed: _submitSalonSearch,
+                      style: TextButton.styleFrom(
+                        backgroundColor: AppTheme.primaryPink,
+                        foregroundColor: AppTheme.white,
+                        padding: EdgeInsets.symmetric(horizontal: 6),
+                        minimumSize: Size(46, 26),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(13),
+                        ),
                       ),
+                      child: Text(
+                        '搜索',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ),
-          ),
-          SizedBox(height: 12),
-          Container(
-            padding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: BoxDecoration(
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _submitSalonSearch() {
+    _searchSuggestionDebounce?.cancel();
+    _removeSearchSuggestionsOverlay();
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _searchKeyword = _searchController.text.trim();
+      _searchDraft = _searchKeyword;
+      _isLoadingSearchSuggestions = false;
+      _searchSuggestionSalons = [];
+    });
+  }
+
+  Widget _buildLocationModule() {
+    final locationLabel = formatLocationLeafAddress(_locationMessage);
+    final pickerButton = IconButton(
+      tooltip: '选择地址',
+      onPressed: _openLocationPicker,
+      icon: const Icon(Icons.keyboard_arrow_down, size: 24),
+      color: AppTheme.white,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints.tightFor(width: 30, height: 30),
+    );
+
+    final message = Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(
+          Icons.location_on_outlined,
+          color: AppTheme.white,
+          size: 20,
+        ),
+        SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            locationLabel,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
               color: AppTheme.white,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: AppTheme.accentBeige),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.my_location_outlined,
-                  color: AppTheme.primaryPink,
-                  size: 20,
-                ),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    _locationMessage,
-                    style: TextStyle(color: Colors.grey[700], fontSize: 13),
-                  ),
-                ),
-                SizedBox(width: 8),
-                TextButton.icon(
-                  onPressed: _isLocating ? null : _locateUser,
-                  icon: _isLocating
-                      ? SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: AppTheme.primaryPink,
-                          ),
-                        )
-                      : Icon(Icons.near_me_outlined, size: 17),
-                  label: Text(_locatedCity == null ? '定位' : '重新定位'),
-                  style: TextButton.styleFrom(
-                    foregroundColor: AppTheme.primaryPink,
-                    padding: EdgeInsets.symmetric(horizontal: 10),
-                  ),
-                ),
-              ],
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
             ),
           ),
-          SizedBox(height: 25),
-          Text(_locatedCity == null ? '推荐沙龙' : '附近优先',
-              style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textDark)),
-          SizedBox(height: 15),
-          if (_isLoading)
-            Center(
-                child: CircularProgressIndicator(color: AppTheme.primaryPink))
-          else if (_errorMessage.isNotEmpty)
-            Center(
-              child: Column(
-                children: [
-                  Text('加载失败: $_errorMessage',
-                      style: TextStyle(color: Colors.red)),
-                  TextButton(onPressed: _loadSalons, child: Text('重新加载'))
-                ],
+        ),
+      ],
+    );
+
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          return ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: constraints.maxWidth * 0.6),
+            child: IntrinsicWidth(
+              child: InkWell(
+                onTap: _openLocationPicker,
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 3),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(child: message),
+                      SizedBox(width: 4),
+                      pickerButton,
+                    ],
+                  ),
+                ),
               ),
-            )
-          else if (filteredSalons.isEmpty)
-            _buildEmptySearchResult()
-          else
-            ...filteredSalons.map((salon) => _buildSalonCard(salon, context)),
-        ],
+            ),
+          );
+        },
       ),
     );
   }
@@ -530,7 +979,7 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
       color: AppTheme.primaryPink,
       onRefresh: _loadBookingMessageStatus,
       child: ListView(
-        padding: EdgeInsets.fromLTRB(20, 20, 20, 28),
+        padding: EdgeInsets.fromLTRB(10, 10, 10, 14),
         children: _bookingOrders.map(_buildOrderCard).toList(),
       ),
     );
@@ -549,7 +998,7 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
         }
 
         return ListView(
-          padding: EdgeInsets.fromLTRB(20, 20, 20, 28),
+          padding: EdgeInsets.fromLTRB(10, 10, 10, 14),
           children: favorites
               .map((salon) => _buildSalonCard(salon, context))
               .toList(),
@@ -580,8 +1029,8 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
               ),
       borderRadius: BorderRadius.circular(8),
       child: Container(
-        margin: EdgeInsets.only(bottom: 14),
-        padding: EdgeInsets.all(16),
+        margin: EdgeInsets.only(bottom: 7),
+        padding: EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: AppTheme.white,
           borderRadius: BorderRadius.circular(8),
@@ -616,6 +1065,9 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
               ],
             ),
             SizedBox(height: 10),
+            _buildOrderInfoRow(
+                Icons.confirmation_number, '订单号 ${order.orderNo}'),
+            SizedBox(height: 6),
             _buildOrderInfoRow(Icons.storefront, order.salonName),
             SizedBox(height: 6),
             _buildOrderInfoRow(Icons.person, order.staffName),
@@ -745,9 +1197,7 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
       await _orderRepository.cancelBooking(order.id);
       await _loadBookingMessageStatus();
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('订单已取消')),
-      );
+      _showSnackBar('订单已取消');
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -816,9 +1266,7 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
                 await _loadBookingMessageStatus();
                 if (!sheetContext.mounted) return;
                 Navigator.pop(sheetContext);
-                ScaffoldMessenger.of(this.context).showSnackBar(
-                  SnackBar(content: Text('评价晒单已提交')),
-                );
+                _showSnackBar('评价晒单已提交');
               } catch (e) {
                 if (!sheetContext.mounted) return;
                 setSheetState(() => isSubmitting = false);
@@ -830,9 +1278,9 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
 
             return Padding(
               padding: EdgeInsets.only(
-                left: 20,
-                right: 20,
-                top: 18,
+                left: 10,
+                right: 10,
+                top: 9,
                 bottom: MediaQuery.of(context).viewInsets.bottom + 20,
               ),
               child: SingleChildScrollView(
@@ -1035,9 +1483,7 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
                 await _loadBookingMessageStatus();
                 if (!sheetContext.mounted) return;
                 Navigator.pop(sheetContext);
-                ScaffoldMessenger.of(this.context).showSnackBar(
-                  SnackBar(content: Text('投诉已提交')),
-                );
+                _showSnackBar('投诉已提交');
               } catch (_) {
                 if (!sheetContext.mounted) return;
                 setSheetState(() => isSubmitting = false);
@@ -1049,9 +1495,9 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
 
             return Padding(
               padding: EdgeInsets.only(
-                left: 20,
-                right: 20,
-                top: 18,
+                left: 10,
+                right: 10,
+                top: 9,
                 bottom: MediaQuery.of(context).viewInsets.bottom + 20,
               ),
               child: SingleChildScrollView(
@@ -1247,7 +1693,7 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
     final avatarImage = _profileAvatarImage();
 
     return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(20, 28, 20, 112),
+      padding: EdgeInsets.fromLTRB(10, 14, 10, 56),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1277,7 +1723,7 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
                       customBorder: CircleBorder(),
                       onTap: _pickProfileAvatar,
                       child: Padding(
-                        padding: EdgeInsets.all(9),
+                        padding: EdgeInsets.all(4.5),
                         child: Icon(
                           Icons.photo_camera_outlined,
                           color: AppTheme.white,
@@ -1310,7 +1756,7 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
           ),
           SizedBox(height: 24),
           Container(
-            padding: EdgeInsets.all(18),
+            padding: EdgeInsets.all(9),
             decoration: BoxDecoration(
               color: AppTheme.white,
               borderRadius: BorderRadius.circular(8),
@@ -1410,7 +1856,7 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
   Widget _buildEmptyTab(IconData icon, String title, String subtitle) {
     return Center(
       child: Padding(
-        padding: EdgeInsets.all(28),
+        padding: EdgeInsets.all(14),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1440,7 +1886,7 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        Icon(Icons.notifications_none, color: AppTheme.textDark),
+        Icon(Icons.notifications_none, color: AppTheme.white),
         if (_hasBookingMessages)
           Positioned(
             top: -1,
@@ -1461,7 +1907,7 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
 
   Widget _buildEmptySearchResult() {
     return Padding(
-      padding: EdgeInsets.only(top: 48),
+      padding: EdgeInsets.only(top: 24),
       child: Center(
         child: Column(
           children: [
@@ -1491,15 +1937,30 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
     return image.isNotEmpty ? image : 'https://via.placeholder.com/400x180';
   }
 
-  Widget _buildSalonImage(Map<String, dynamic> salon) {
-    return Image.network(
-      _salonCoverImageUrl(salon),
-      height: 180,
-      width: double.infinity,
+  Widget _buildSalonImage(
+    Map<String, dynamic> salon, {
+    double height = 180,
+    double width = double.infinity,
+    int memCacheWidth = 900,
+  }) {
+    return CachedNetworkImage(
+      imageUrl: _salonCoverImageUrl(salon),
+      height: height,
+      width: width,
       fit: BoxFit.cover,
       alignment: Alignment.topCenter,
-      errorBuilder: (context, error, stackTrace) => Container(
-        height: 180,
+      memCacheWidth: memCacheWidth,
+      filterQuality: FilterQuality.low,
+      fadeInDuration: Duration.zero,
+      fadeOutDuration: Duration.zero,
+      placeholder: (context, url) => Container(
+        height: height,
+        width: width,
+        color: Colors.grey[200],
+      ),
+      errorWidget: (context, url, error) => Container(
+        height: height,
+        width: width,
         color: Colors.grey,
         child: Icon(Icons.broken_image),
       ),
@@ -1507,65 +1968,157 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
   }
 
   Widget _buildSalonCard(Map<String, dynamic> salon, BuildContext context) {
-    return GestureDetector(
-      onTap: () => context.pushNamed(
-        'salon_detail',
-        pathParameters: {'id': salon['id'].toString()},
-      ),
-      child: Container(
-        margin: EdgeInsets.only(bottom: 20),
-        decoration: BoxDecoration(
-          color: AppTheme.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 15,
-                offset: Offset(0, 5))
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ClipRRect(
-              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-              child: _buildSalonImage(salon),
+    final distanceLabel = _formatSalonDistance(salon);
+    final salonId = salon['id'].toString();
+    const cardHeight = 132.0;
+
+    return RepaintBoundary(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final imageWidth = (constraints.maxWidth * 0.45).clamp(150.0, 178.0);
+
+          return GestureDetector(
+            onTap: () => context.pushNamed(
+              'salon_detail',
+              pathParameters: {'id': salonId},
             ),
-            Padding(
-              padding: EdgeInsets.all(15),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(salon['name'] ?? '未知沙龙',
-                          style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: AppTheme.textDark)),
-                      Text('⭐ ${salon['rating']}',
-                          style: TextStyle(
-                              color: Colors.orange,
-                              fontWeight: FontWeight.bold)),
-                    ],
+            child: Container(
+              height: cardHeight,
+              margin: EdgeInsets.only(bottom: 7),
+              decoration: BoxDecoration(
+                color: AppTheme.white,
+                borderRadius: BorderRadius.circular(16),
+                border:
+                    Border.all(color: AppTheme.accentBeige.withOpacity(0.7)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.08),
+                    blurRadius: 14,
+                    offset: Offset(0, 6),
                   ),
-                  SizedBox(height: 5),
-                  Text(formatSalonCityAddress(salon['address']),
-                      style: TextStyle(color: Colors.grey, fontSize: 13)),
-                  SizedBox(height: 10),
-                  Text(
-                    salon['description'] ?? '暂无描述',
-                    style: TextStyle(
-                        color: Colors.black87, fontSize: 14, height: 1.4),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
+                ],
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SizedBox(
+                    width: imageWidth,
+                    child: _buildSalonImage(
+                      salon,
+                      height: cardHeight,
+                      width: imageWidth,
+                      memCacheWidth: 430,
+                    ),
+                  ),
+                  Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(6, 8, 4, 4),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  salon['name'] ?? '未知沙龙',
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    height: 1.18,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.textDark,
+                                  ),
+                                ),
+                              ),
+                              SizedBox(width: 8),
+                              Text(
+                                '⭐ ${salon['rating']}',
+                                style: TextStyle(
+                                  color: Colors.orange,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                          SizedBox(height: 5),
+                          Text(
+                            salon['description'] ?? '暂无描述',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 14,
+                              height: 1.05,
+                              fontWeight: FontWeight.normal,
+                            ),
+                          ),
+                          Spacer(),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Expanded(
+                                child: distanceLabel == null
+                                    ? SizedBox.shrink()
+                                    : Text(
+                                        distanceLabel,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: AppTheme.primaryPink,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                              ),
+                              ValueListenableBuilder<
+                                  List<Map<String, dynamic>>>(
+                                valueListenable: FavoriteSalonStore.favorites,
+                                builder: (context, favorites, _) {
+                                  final isFavorite =
+                                      FavoriteSalonStore.isFavorite(salonId);
+                                  return IconButton(
+                                    tooltip: isFavorite ? '取消收藏' : '收藏',
+                                    onPressed: () async {
+                                      try {
+                                        await FavoriteSalonStore.toggle(salon);
+                                      } catch (_) {
+                                        if (!mounted) return;
+                                        _showSnackBar('收藏操作失败，请稍后重试');
+                                      }
+                                    },
+                                    icon: Icon(
+                                      isFavorite
+                                          ? Icons.favorite
+                                          : Icons.favorite_border,
+                                      size: 23,
+                                    ),
+                                    color: isFavorite
+                                        ? AppTheme.primaryPink
+                                        : Colors.grey[700],
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints.tightFor(
+                                      width: 28,
+                                      height: 24,
+                                    ),
+                                    visualDensity: VisualDensity.compact,
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }

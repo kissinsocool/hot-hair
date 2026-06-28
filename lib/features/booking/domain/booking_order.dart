@@ -1,5 +1,6 @@
 class BookingOrder {
   final String id;
+  final String orderNo;
   final String userId;
   final String userName;
   final String salonId;
@@ -24,6 +25,7 @@ class BookingOrder {
 
   BookingOrder({
     required this.id,
+    this.orderNo = '',
     required this.userId,
     required this.userName,
     required this.salonId,
@@ -50,6 +52,7 @@ class BookingOrder {
   factory BookingOrder.fromJson(Map<String, dynamic> json) {
     return BookingOrder(
       id: json['id'] as String,
+      orderNo: json['orderNo']?.toString() ?? (json['id'] as String),
       userId: json['userId'] as String,
       userName: json['userName'] as String,
       salonId: json['salonId']?.toString() ?? '',

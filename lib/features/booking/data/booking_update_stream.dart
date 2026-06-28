@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 class BookingUpdateStream {
@@ -15,6 +16,7 @@ class BookingUpdateStream {
   Timer? _reconnectTimer;
   bool _isConnecting = false;
   bool _isStarted = false;
+  static const _developmentHost = '192.168.1.44';
 
   Stream<Map<String, dynamic>> get stream => _controller.stream;
 
@@ -30,7 +32,7 @@ class BookingUpdateStream {
     _isConnecting = true;
     try {
       final channel = WebSocketChannel.connect(
-        Uri.parse('ws://localhost:3000/ws'),
+        Uri.parse(_socketUrl),
       );
       _channel = channel;
       _isConnecting = false;
@@ -45,6 +47,20 @@ class BookingUpdateStream {
       _isConnecting = false;
       _scheduleReconnect();
     }
+  }
+
+  String get _socketUrl {
+    const configured = String.fromEnvironment('API_BASE_URL');
+    if (configured.isNotEmpty) {
+      final apiUri = Uri.parse(configured);
+      final scheme = apiUri.scheme == 'https' ? 'wss' : 'ws';
+      return '$scheme://${apiUri.host}:${apiUri.hasPort ? apiUri.port : 3000}/ws';
+    }
+
+    final host = kIsWeb
+        ? (Uri.base.host.isEmpty ? 'localhost' : Uri.base.host)
+        : _developmentHost;
+    return 'ws://$host:3000/ws';
   }
 
   void _handleMessage(dynamic message) {

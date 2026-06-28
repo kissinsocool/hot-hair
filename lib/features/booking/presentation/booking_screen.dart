@@ -134,7 +134,12 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
         iconTheme: IconThemeData(color: AppTheme.textDark),
       ),
       body: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(20, 20, 20, 28),
+        padding: EdgeInsets.fromLTRB(
+          10,
+          10,
+          10,
+          MediaQuery.sizeOf(context).height * 0.2,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -187,7 +192,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
             if (bookingState.isLoading)
               Center(
                   child: Padding(
-                padding: EdgeInsets.symmetric(vertical: 20),
+                padding: EdgeInsets.symmetric(vertical: 10),
                 child: CircularProgressIndicator(color: AppTheme.primaryPink),
               ))
             else
@@ -237,7 +242,12 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
         ),
       ),
       bottomNavigationBar: Container(
-        padding: EdgeInsets.all(20),
+        padding: EdgeInsets.fromLTRB(
+          10,
+          10,
+          10,
+          MediaQuery.paddingOf(context).bottom + 9,
+        ),
         color: AppTheme.white,
         child: SizedBox(
           width: double.infinity,
@@ -282,8 +292,8 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
         _loadSlotsForDate(selectedDate!);
       },
       child: Container(
-        margin: EdgeInsets.only(bottom: 12),
-        padding: EdgeInsets.all(15),
+        margin: EdgeInsets.only(bottom: 6),
+        padding: EdgeInsets.all(7.5),
         decoration: BoxDecoration(
           color: AppTheme.white,
           borderRadius: BorderRadius.circular(20),
@@ -338,7 +348,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
                               SizedBox(width: 8),
                               Container(
                                 padding: EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 2),
+                                    horizontal: 3, vertical: 1),
                                 decoration: BoxDecoration(
                                   color: Colors.black,
                                   borderRadius: BorderRadius.circular(4),
@@ -391,7 +401,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
       },
       child: Container(
         width: 60,
-        margin: EdgeInsets.only(right: 10),
+        margin: EdgeInsets.only(right: 5),
         decoration: BoxDecoration(
           color: isSelected ? AppTheme.primaryPink : AppTheme.bgCream,
           borderRadius: BorderRadius.circular(12),
@@ -424,8 +434,8 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
         ref.read(bookingProvider.notifier).selectService(service);
       },
       child: Container(
-        margin: EdgeInsets.only(bottom: 12),
-        padding: EdgeInsets.all(15),
+        margin: EdgeInsets.only(bottom: 6),
+        padding: EdgeInsets.all(7.5),
         decoration: BoxDecoration(
           color: AppTheme.white,
           borderRadius: BorderRadius.circular(15),

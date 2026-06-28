@@ -1,0 +1,10 @@
+{
+  "module": {
+    "name": "csp_amap_flutter_location",
+    "type": "har",
+    "deviceTypes": [
+      "default",
+      "tablet"
+    ]
+  }
+}

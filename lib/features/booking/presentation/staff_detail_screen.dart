@@ -173,7 +173,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
             Container(
               width: double.infinity,
               color: AppTheme.white,
-              padding: EdgeInsets.symmetric(vertical: 30, horizontal: 20),
+              padding: EdgeInsets.symmetric(vertical: 15, horizontal: 10),
               child: Column(
                 children: [
                   CircleAvatar(
@@ -197,7 +197,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
               ),
             ),
             Padding(
-              padding: EdgeInsets.all(20),
+              padding: EdgeInsets.all(10),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -219,9 +219,9 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
               ),
             ),
             Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20),
+              padding: EdgeInsets.symmetric(horizontal: 10),
               child: Container(
-                padding: EdgeInsets.all(20),
+                padding: EdgeInsets.all(10),
                 decoration: BoxDecoration(
                     color: AppTheme.white,
                     borderRadius: BorderRadius.circular(20),
@@ -246,7 +246,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
             ),
             SizedBox(height: 30),
             Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20),
+              padding: EdgeInsets.symmetric(horizontal: 10),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -259,7 +259,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                   if (staff.reviews.isEmpty)
                     Center(
                       child: Padding(
-                        padding: EdgeInsets.symmetric(vertical: 20),
+                        padding: EdgeInsets.symmetric(vertical: 10),
                         child:
                             Text('暂无评价', style: TextStyle(color: Colors.grey)),
                       ),
@@ -276,7 +276,12 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
         ),
       ),
       bottomNavigationBar: Container(
-        padding: EdgeInsets.all(20),
+        padding: EdgeInsets.fromLTRB(
+          10,
+          10,
+          10,
+          MediaQuery.paddingOf(context).bottom + 9,
+        ),
         color: AppTheme.white,
         child: SizedBox(
           width: double.infinity,
@@ -314,8 +319,8 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
 
   Widget _buildReviewCard(Review review) {
     return Container(
-      margin: EdgeInsets.only(bottom: 15),
-      padding: EdgeInsets.all(15),
+      margin: EdgeInsets.only(bottom: 7.5),
+      padding: EdgeInsets.all(7.5),
       decoration: BoxDecoration(
           color: AppTheme.white,
           borderRadius: BorderRadius.circular(15),
@@ -369,7 +374,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
             SizedBox(height: 12),
             Container(
               width: double.infinity,
-              padding: EdgeInsets.all(12),
+              padding: EdgeInsets.all(6),
               decoration: BoxDecoration(
                 color: AppTheme.bgCream,
                 borderRadius: BorderRadius.circular(10),

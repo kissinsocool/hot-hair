@@ -58,7 +58,7 @@ class _UserBookingMessagesScreenState extends State<UserBookingMessagesScreen> {
     try {
       final orders = await _repository.fetchUserBookings();
       if (!mounted) return;
-      BookingMessageReadStore.markRead(
+      await BookingMessageReadStore.markRead(
         BookingMessageReadStore.latestMessageKey(orders),
       );
       setState(() {
@@ -105,11 +105,11 @@ class _UserBookingMessagesScreenState extends State<UserBookingMessagesScreen> {
         color: AppTheme.primaryPink,
         onRefresh: _loadOrders,
         child: ListView(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(10),
           children: [
             if (_isLoading)
               Padding(
-                padding: const EdgeInsets.only(top: 80),
+                padding: const EdgeInsets.only(top: 40),
                 child: Center(
                     child:
                         CircularProgressIndicator(color: AppTheme.primaryPink)),
@@ -139,8 +139,8 @@ class _UserBookingMessagesScreenState extends State<UserBookingMessagesScreen> {
     };
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 7),
+      padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
         color: AppTheme.white,
         borderRadius: BorderRadius.circular(8),
@@ -205,7 +205,7 @@ class _UserBookingMessagesScreenState extends State<UserBookingMessagesScreen> {
 
   Widget _buildEmptyState(String title, String subtitle) {
     return Padding(
-      padding: const EdgeInsets.only(top: 90),
+      padding: const EdgeInsets.only(top: 45),
       child: Column(
         children: [
           Icon(Icons.notifications_none, size: 56, color: Colors.grey[400]),

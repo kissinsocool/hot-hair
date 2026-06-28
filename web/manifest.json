@@ -1,6 +1,6 @@
 {
-    "name": "hot_pepper_clone",
-    "short_name": "hot_pepper_clone",
+    "name": "麻辣烫",
+    "short_name": "麻辣烫",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
