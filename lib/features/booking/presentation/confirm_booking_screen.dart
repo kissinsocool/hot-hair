@@ -164,37 +164,41 @@ class ConfirmBookingScreen extends ConsumerWidget {
         context: context,
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
-        builder: (context) => Container(
-          padding: EdgeInsets.all(15),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.check_circle, color: Colors.green, size: 60),
-              SizedBox(height: 20),
-              Text('预约申请已发送给商家！',
-                  style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: AppTheme.textDark),
-                  textAlign: TextAlign.center),
-              SizedBox(height: 8),
-              Text('商家接单或拒单后，您可以在预约消息中查看结果。',
-                  style: TextStyle(color: Colors.grey[600]),
-                  textAlign: TextAlign.center),
-              SizedBox(height: 30),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    context.go(AppRouter.userMessages);
-                  },
-                  style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.primaryPink),
-                  child: Text('查看预约消息', style: TextStyle(color: Colors.white)),
+        builder: (context) => SafeArea(
+          top: false,
+          child: Container(
+            padding: EdgeInsets.all(15),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.check_circle, color: Colors.green, size: 60),
+                SizedBox(height: 20),
+                Text('预约申请已发送给商家！',
+                    style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.textDark),
+                    textAlign: TextAlign.center),
+                SizedBox(height: 8),
+                Text('商家接单或拒单后，您可以在预约消息中查看结果。',
+                    style: TextStyle(color: Colors.grey[600]),
+                    textAlign: TextAlign.center),
+                SizedBox(height: 30),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      context.go(AppRouter.userMessages);
+                    },
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.primaryPink),
+                    child:
+                        Text('查看预约消息', style: TextStyle(color: Colors.white)),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       );

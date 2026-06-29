@@ -3,7 +3,7 @@ import 'package:dio/dio.dart';
 
 class ApiClient {
   static String? authToken;
-  static const _developmentHost = '192.168.1.44';
+  static const _developmentHost = '192.168.1.46';
 
   final Dio _dio = Dio(BaseOptions(
     baseUrl: _apiBaseUrl,

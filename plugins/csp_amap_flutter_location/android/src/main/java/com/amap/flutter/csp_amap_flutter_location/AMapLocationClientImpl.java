@@ -40,6 +40,10 @@ public class AMapLocationClientImpl implements AMapLocationListener {
         }
     }
 
+    public void setEventSink(EventChannel.EventSink eventSink) {
+        mEventSink = eventSink;
+    }
+
     /**
      * 开始定位
      */
@@ -133,7 +137,9 @@ public class AMapLocationClientImpl implements AMapLocationListener {
         }
 
         if (optionMap.containsKey("onceLocation")) {
-            locationOption.setOnceLocation((boolean) optionMap.get("onceLocation"));
+            boolean onceLocation = (boolean) optionMap.get("onceLocation");
+            locationOption.setOnceLocation(onceLocation);
+            locationOption.setOnceLocationLatest(onceLocation);
         }
 
         if (null != locationClient) {

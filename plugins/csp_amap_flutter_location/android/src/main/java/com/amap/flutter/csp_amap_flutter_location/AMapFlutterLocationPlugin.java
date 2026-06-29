@@ -84,6 +84,9 @@ public class AMapFlutterLocationPlugin implements FlutterPlugin, MethodCallHandl
   @Override
   public void onListen(Object o, EventChannel.EventSink eventSink) {
     mEventSink = eventSink;
+    for (Map.Entry<String, AMapLocationClientImpl> entry : locationClientMap.entrySet()) {
+      entry.getValue().setEventSink(eventSink);
+    }
   }
 
   /**
@@ -253,7 +256,9 @@ public class AMapFlutterLocationPlugin implements FlutterPlugin, MethodCallHandl
       AMapLocationClientImpl locationClientImp = new AMapLocationClientImpl(mContext, pluginKey, mEventSink);
       locationClientMap.put(pluginKey, locationClientImp);
     }
-    return locationClientMap.get(pluginKey);
+    AMapLocationClientImpl locationClientImp = locationClientMap.get(pluginKey);
+    locationClientImp.setEventSink(mEventSink);
+    return locationClientImp;
   }
 
   /**

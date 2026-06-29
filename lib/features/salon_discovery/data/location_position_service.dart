@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:csp_amap_flutter_location/amap_flutter_location.dart';
 import 'package:csp_amap_flutter_location/amap_location_option.dart';
+import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 
 class LocationPositionService {
@@ -15,6 +16,7 @@ class LocationPositionService {
     'AMAP_IOS_KEY',
     defaultValue: '834625b89e475e766cc5c5e3bd5c3cc8',
   );
+  static const _cachedPositionMaxAge = Duration(minutes: 5);
   static bool _configured = false;
 
   static Future<Position> currentPosition() async {
@@ -30,7 +32,38 @@ class LocationPositionService {
       throw Exception('未获得定位权限');
     }
 
+    final cachedPosition = await Geolocator.getLastKnownPosition();
+    if (cachedPosition != null &&
+        DateTime.now().difference(cachedPosition.timestamp) <=
+            _cachedPositionMaxAge) {
+      return cachedPosition;
+    }
+
+    if (kIsWeb ||
+        (defaultTargetPlatform != TargetPlatform.android &&
+            defaultTargetPlatform != TargetPlatform.iOS)) {
+      return Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
+      );
+    }
+
     _configureAmap();
+    for (var attempt = 0; attempt < 2; attempt++) {
+      try {
+        return await _currentAmapPosition();
+      } catch (_) {
+        if (attempt == 1) rethrow;
+        // ponytail: Android AMap can miss right after permission grant; one retry mirrors the manual re-locate path.
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      }
+    }
+
+    throw Exception('定位失败，请重试');
+  }
+
+  static Future<Position> _currentAmapPosition() async {
     final location = AMapFlutterLocation();
     try {
       location.setLocationOption(AMapLocationOption(
@@ -39,11 +72,12 @@ class LocationPositionService {
         locatingWithReGeocode: false,
         geoLanguage: GeoLanguage.ZH,
         locationMode: AMapLocationMode.Hight_Accuracy,
+        desiredAccuracy: DesiredAccuracy.HundredMeters,
       ));
       final resultFuture = location
           .onLocationChanged()
           .first
-          .timeout(const Duration(seconds: 20));
+          .timeout(const Duration(seconds: 8));
       location.startLocation();
       final result = await resultFuture;
       final position = positionFromAmapResult(result);

@@ -37,6 +37,7 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
   static bool _hasRequestedInitialLocationForSession = false;
   static Position? _cachedUserPosition;
   static String? _cachedLocationMessage;
+  static const int _salonPageSize = 10;
 
   final SalonRepository _salonRepository = SalonRepository();
   final LocationReverseGeocodeRepository _locationRepository =
@@ -58,6 +59,8 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
   bool _hasBookingMessages = false;
   String? _latestBookingMessageKey;
   List<Map<String, dynamic>> _salons = [];
+  int _visibleSalonCount = _salonPageSize;
+  bool _salonsLoadedWithPosition = false;
   List<BookingOrder> _bookingOrders = [];
   List<Map<String, dynamic>> _searchSuggestionSalons = [];
   final Set<String> _reviewedOrderIds = {};
@@ -67,6 +70,7 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
   String _searchDraft = '';
   bool _isLoadingSearchSuggestions = false;
   Timer? _searchSuggestionDebounce;
+  int _salonRequestId = 0;
   int _searchSuggestionRequestId = 0;
   double _searchFieldWidth = 0;
   Position? _userPosition;
@@ -85,15 +89,6 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
             return name.contains(keyword);
           }).toList();
 
-    if (_userPosition != null) {
-      source.sort((left, right) {
-        final leftDistance = _salonDistanceMeters(left) ?? double.infinity;
-        final rightDistance = _salonDistanceMeters(right) ?? double.infinity;
-        return leftDistance.compareTo(rightDistance);
-      });
-      return source;
-    }
-
     return source;
   }
 
@@ -103,7 +98,7 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
     _searchFocusNode.addListener(_handleSearchFocusChanged);
     _syncProfileControllers();
     _restoreCachedLocation();
-    _loadSalons();
+    if (_userPosition != null) _loadSalons();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _locateUserOnceOnOpen();
     });
@@ -259,14 +254,19 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
       setState(() {
         _userPosition = position;
         _locationMessage = locationMessage;
+        _visibleSalonCount = _salonPageSize;
       });
+      unawaited(_loadSalons());
       unawaited(_refreshCurrentAddress(position));
     } catch (error) {
       _cachedUserPosition = null;
-      _cachedLocationMessage = '定位失败，继续展示全部沙龙';
+      _cachedLocationMessage = '定位失败，请开启定位后查看附近店铺';
       if (!mounted) return;
       setState(() {
-        _locationMessage = '定位失败，继续展示全部沙龙';
+        _locationMessage = '定位失败，请开启定位后查看附近店铺';
+        _isLoading = false;
+        _salons = [];
+        _salonsLoadedWithPosition = false;
       });
       if (showFailureSnackBar) _showSnackBar(error.toString());
     }
@@ -329,6 +329,7 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
     if (!mounted || address == null || address.isEmpty) return;
     setState(() {
       _locationMessage = formatLocationLeafAddress(address);
+      _visibleSalonCount = _salonPageSize;
       final latitude =
           double.tryParse(selection?['latitude']?.toString() ?? '');
       final longitude =
@@ -350,9 +351,16 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
       }
       _cacheCurrentLocationState();
     });
+    unawaited(_loadSalons());
   }
 
   double? _salonDistanceMeters(Map<String, dynamic> salon) {
+    if (!_salonsLoadedWithPosition) return null;
+
+    final serverDistanceKm =
+        double.tryParse(salon['distanceKm']?.toString() ?? '');
+    if (serverDistanceKm != null) return serverDistanceKm * 1000;
+
     final position = _userPosition;
     if (position == null) return null;
 
@@ -391,17 +399,34 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
   }
 
   Future<void> _loadSalons() async {
+    final requestId = ++_salonRequestId;
+    final position = _userPosition;
+    if (position == null) {
+      setState(() {
+        _isLoading = false;
+        _salons = [];
+        _salonsLoadedWithPosition = false;
+      });
+      return;
+    }
     setState(() {
       _isLoading = true;
       _errorMessage = '';
     });
     try {
-      final data = await _salonRepository.fetchSalons();
+      final data = await _salonRepository.fetchSalons(
+        latitude: position.latitude,
+        longitude: position.longitude,
+      );
+      if (!mounted || requestId != _salonRequestId) return;
       setState(() {
         _salons = data;
+        _salonsLoadedWithPosition = true;
+        _visibleSalonCount = _salonPageSize;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted || requestId != _salonRequestId) return;
       setState(() {
         _errorMessage = e.toString();
         _isLoading = false;
@@ -475,14 +500,6 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
       final name = (salon['name'] ?? '').toString().toLowerCase();
       return name.contains(normalizedKeyword);
     }).toList();
-
-    if (_userPosition != null) {
-      matches.sort((left, right) {
-        final leftDistance = _salonDistanceMeters(left) ?? double.infinity;
-        final rightDistance = _salonDistanceMeters(right) ?? double.infinity;
-        return leftDistance.compareTo(rightDistance);
-      });
-    }
 
     return matches.take(5).toList();
   }
@@ -780,51 +797,59 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
   }
 
   Widget _buildExploreTab(List<Map<String, dynamic>> filteredSalons) {
+    final visibleSalons = filteredSalons.take(_visibleSalonCount).toList();
     final headerCount =
-        _isLoading || _errorMessage.isNotEmpty || filteredSalons.isEmpty
-            ? 1
-            : 0;
-    final itemCount = 2 + headerCount + filteredSalons.length;
+        _isLoading || _errorMessage.isNotEmpty || visibleSalons.isEmpty ? 1 : 0;
+    final itemCount = 2 + headerCount + visibleSalons.length;
 
     return Column(
       children: [
         Expanded(
-          child: ListView.builder(
-            padding: EdgeInsets.fromLTRB(10, 10, 10, 14),
-            cacheExtent: 420,
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            itemCount: itemCount,
-            itemBuilder: (context, index) {
-              if (index == 0) {
-                return Text(_userPosition == null ? '推荐沙龙' : '附近的店铺',
-                    style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.textDark));
+          child: NotificationListener<ScrollEndNotification>(
+            onNotification: (notification) {
+              if (notification.metrics.extentAfter == 0 &&
+                  _visibleSalonCount < filteredSalons.length) {
+                setState(() => _visibleSalonCount += _salonPageSize);
               }
-              if (index == 1) return SizedBox(height: 15);
-
-              final contentIndex = index - 2;
-              if (_isLoading) {
-                return Center(
-                    child:
-                        CircularProgressIndicator(color: AppTheme.primaryPink));
-              }
-              if (_errorMessage.isNotEmpty) {
-                return Center(
-                  child: Column(
-                    children: [
-                      Text('加载失败: $_errorMessage',
-                          style: TextStyle(color: Colors.red)),
-                      TextButton(onPressed: _loadSalons, child: Text('重新加载'))
-                    ],
-                  ),
-                );
-              }
-              if (filteredSalons.isEmpty) return _buildEmptySearchResult();
-
-              return _buildSalonCard(filteredSalons[contentIndex], context);
+              return false;
             },
+            child: ListView.builder(
+              padding: EdgeInsets.fromLTRB(10, 10, 10, 14),
+              cacheExtent: 420,
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              itemCount: itemCount,
+              itemBuilder: (context, index) {
+                if (index == 0) {
+                  return Text(_salonsLoadedWithPosition ? '附近的店铺' : '推荐沙龙',
+                      style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textDark));
+                }
+                if (index == 1) return SizedBox(height: 15);
+
+                final contentIndex = index - 2;
+                if (_isLoading) {
+                  return Center(
+                      child: CircularProgressIndicator(
+                          color: AppTheme.primaryPink));
+                }
+                if (_errorMessage.isNotEmpty) {
+                  return Center(
+                    child: Column(
+                      children: [
+                        Text('加载失败: $_errorMessage',
+                            style: TextStyle(color: Colors.red)),
+                        TextButton(onPressed: _loadSalons, child: Text('重新加载'))
+                      ],
+                    ),
+                  );
+                }
+                if (visibleSalons.isEmpty) return _buildEmptySearchResult();
+
+                return _buildSalonCard(visibleSalons[contentIndex], context);
+              },
+            ),
           ),
         ),
       ],
@@ -903,6 +928,7 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
     setState(() {
       _searchKeyword = _searchController.text.trim();
       _searchDraft = _searchKeyword;
+      _visibleSalonCount = _salonPageSize;
       _isLoadingSearchSuggestions = false;
       _searchSuggestionSalons = [];
     });

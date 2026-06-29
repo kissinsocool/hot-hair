@@ -3,9 +3,18 @@ import '../../../core/network/api_client.dart';
 class SalonRepository {
   final ApiClient _apiClient = ApiClient();
 
-  Future<List<Map<String, dynamic>>> fetchSalons() async {
+  Future<List<Map<String, dynamic>>> fetchSalons({
+    required double latitude,
+    required double longitude,
+  }) async {
     try {
-      final response = await _apiClient.request('/salons');
+      final response = await _apiClient.request(
+        '/salons',
+        queryParameters: {
+          'latitude': latitude,
+          'longitude': longitude,
+        },
+      );
       return List<Map<String, dynamic>>.from(
         response.data,
       ).map(_normalizeSalonImages).toList();
