@@ -13,15 +13,7 @@ class ReviewRepository {
     required String comment,
     required List<XFile> images,
   }) async {
-    final imagePayload = <Map<String, String>>[];
-
-    for (final image in images.take(5)) {
-      final bytes = await image.readAsBytes();
-      imagePayload.add({
-        'fileName': image.name,
-        'data': base64Encode(bytes),
-      });
-    }
+    final imagePayload = await _imagePayload(images);
 
     await _apiClient.request(
       '/bookings/$bookingId/review',
@@ -29,7 +21,7 @@ class ReviewRepository {
       data: {
         'rating': rating,
         'comment': comment,
-        'images': imagePayload,
+        if (imagePayload.isNotEmpty) 'images': imagePayload,
       },
     );
   }
@@ -39,23 +31,30 @@ class ReviewRepository {
     required String description,
     required List<XFile> images,
   }) async {
-    final imagePayload = <Map<String, String>>[];
-
-    for (final image in images.take(5)) {
-      final bytes = await image.readAsBytes();
-      imagePayload.add({
-        'fileName': image.name,
-        'data': base64Encode(bytes),
-      });
-    }
+    final imagePayload = await _imagePayload(images);
 
     await _apiClient.request(
       '/bookings/$bookingId/complaint',
       method: 'POST',
       data: {
         'description': description,
-        'images': imagePayload,
+        if (imagePayload.isNotEmpty) 'images': imagePayload,
       },
     );
+  }
+
+  Future<List<Map<String, String>>> _imagePayload(List<XFile> images) async {
+    final payload = <Map<String, String>>[];
+
+    for (final image in images.take(5)) {
+      final bytes = await image.readAsBytes();
+      payload.add({
+        'fileName': image.name,
+        'mimeType': image.mimeType ?? 'image/jpeg',
+        'data': base64Encode(bytes),
+      });
+    }
+
+    return payload;
   }
 }

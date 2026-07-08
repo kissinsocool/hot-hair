@@ -64,7 +64,7 @@ class ConfirmBookingScreen extends ConsumerWidget {
                               .format(bookingState.selectedDate!)
                           : '未选择'),
                   SizedBox(height: 10),
-                  _buildRow('具体时间', bookingState.selectedTime ?? '未选择'),
+                  _buildRow('到店时间', bookingState.selectedTime ?? '未选择'),
                   Divider(height: 30),
                   _buildRow('理发师', bookingState.selectedStaff?.name ?? '未选择'),
                   Divider(height: 30),

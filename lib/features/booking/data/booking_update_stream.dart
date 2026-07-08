@@ -16,7 +16,7 @@ class BookingUpdateStream {
   Timer? _reconnectTimer;
   bool _isConnecting = false;
   bool _isStarted = false;
-  static const _developmentHost = '192.168.1.46';
+  static const _developmentHost = '192.168.1.11';
 
   Stream<Map<String, dynamic>> get stream => _controller.stream;
 

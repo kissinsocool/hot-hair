@@ -259,16 +259,17 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
       unawaited(_loadSalons());
       unawaited(_refreshCurrentAddress(position));
     } catch (error) {
+      final message = error.toString().replaceFirst('Exception: ', '');
       _cachedUserPosition = null;
-      _cachedLocationMessage = '定位失败，请开启定位后查看附近店铺';
+      _cachedLocationMessage = message;
       if (!mounted) return;
       setState(() {
-        _locationMessage = '定位失败，请开启定位后查看附近店铺';
+        _locationMessage = message;
         _isLoading = false;
         _salons = [];
         _salonsLoadedWithPosition = false;
       });
-      if (showFailureSnackBar) _showSnackBar(error.toString());
+      if (showFailureSnackBar) _showSnackBar(message);
     }
   }
 
@@ -1258,7 +1259,10 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
               final remainCount = 5 - images.length;
               if (remainCount <= 0) return;
 
-              final picked = await ImagePicker().pickMultiImage();
+              final picked = await ImagePicker().pickMultiImage(
+                maxWidth: 1600,
+                imageQuality: 70,
+              );
               if (picked.isEmpty) return;
 
               setSheetState(() {
@@ -1308,151 +1312,155 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
               }
             }
 
-            return Padding(
-              padding: EdgeInsets.only(
-                left: 10,
-                right: 10,
-                top: 9,
-                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-              ),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            '评价晒单',
-                            style: TextStyle(
-                              color: AppTheme.textDark,
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: '关闭',
-                          onPressed: () => Navigator.pop(sheetContext),
-                          icon: Icon(Icons.close),
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: 8),
-                    _buildOrderInfoRow(Icons.storefront, order.salonName),
-                    SizedBox(height: 6),
-                    _buildOrderInfoRow(Icons.content_cut, order.serviceName),
-                    SizedBox(height: 18),
-                    Text(
-                      '选择星级',
-                      style: TextStyle(
-                        color: AppTheme.textDark,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    SizedBox(height: 8),
-                    Row(
-                      children: List.generate(5, (index) {
-                        final starValue = index + 1;
-                        final selected = starValue <= rating;
-                        return IconButton(
-                          tooltip: '$starValue 星',
-                          onPressed: () =>
-                              setSheetState(() => rating = starValue),
-                          icon: Icon(
-                            selected ? Icons.star : Icons.star_border,
-                            color: selected ? Colors.amber : Colors.grey[400],
-                            size: 32,
-                          ),
-                        );
-                      }),
-                    ),
-                    SizedBox(height: 14),
-                    TextField(
-                      controller: reviewController,
-                      maxLines: 4,
-                      maxLength: 200,
-                      decoration: InputDecoration(
-                        hintText: '分享这次服务体验...',
-                        filled: true,
-                        fillColor: AppTheme.bgCream,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: AppTheme.accentBeige),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: AppTheme.accentBeige),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(
-                              color: AppTheme.primaryPink, width: 1.4),
-                        ),
-                      ),
-                    ),
-                    SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            '上传图片 ${images.length}/5',
-                            style: TextStyle(
-                              color: AppTheme.textDark,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        TextButton.icon(
-                          onPressed: images.length >= 5 ? null : pickImages,
-                          icon: Icon(Icons.add_photo_alternate_outlined),
-                          label: Text('选择图片'),
-                        ),
-                      ],
-                    ),
-                    if (images.isNotEmpty) ...[
-                      SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: images
-                            .map(
-                              (image) => _buildPickedImageTile(
-                                image,
-                                () => setSheetState(() => images.remove(image)),
+            return SafeArea(
+              top: false,
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 10,
+                  right: 10,
+                  top: 9,
+                  bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '评价晒单',
+                              style: TextStyle(
+                                color: AppTheme.textDark,
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
                               ),
-                            )
-                            .toList(),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: '关闭',
+                            onPressed: () => Navigator.pop(sheetContext),
+                            icon: Icon(Icons.close),
+                          ),
+                        ],
                       ),
-                    ],
-                    SizedBox(height: 20),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 48,
-                      child: ElevatedButton.icon(
-                        onPressed: isSubmitting ? null : submitReview,
-                        icon: isSubmitting
-                            ? SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: AppTheme.white,
+                      SizedBox(height: 8),
+                      _buildOrderInfoRow(Icons.storefront, order.salonName),
+                      SizedBox(height: 6),
+                      _buildOrderInfoRow(Icons.content_cut, order.serviceName),
+                      SizedBox(height: 18),
+                      Text(
+                        '选择星级',
+                        style: TextStyle(
+                          color: AppTheme.textDark,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      SizedBox(height: 8),
+                      Row(
+                        children: List.generate(5, (index) {
+                          final starValue = index + 1;
+                          final selected = starValue <= rating;
+                          return IconButton(
+                            tooltip: '$starValue 星',
+                            onPressed: () =>
+                                setSheetState(() => rating = starValue),
+                            icon: Icon(
+                              selected ? Icons.star : Icons.star_border,
+                              color: selected ? Colors.amber : Colors.grey[400],
+                              size: 32,
+                            ),
+                          );
+                        }),
+                      ),
+                      SizedBox(height: 14),
+                      TextField(
+                        controller: reviewController,
+                        maxLines: 4,
+                        maxLength: 200,
+                        decoration: InputDecoration(
+                          hintText: '分享这次服务体验...',
+                          filled: true,
+                          fillColor: AppTheme.bgCream,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: AppTheme.accentBeige),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: AppTheme.accentBeige),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                                color: AppTheme.primaryPink, width: 1.4),
+                          ),
+                        ),
+                      ),
+                      SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '上传图片 ${images.length}/5',
+                              style: TextStyle(
+                                color: AppTheme.textDark,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: images.length >= 5 ? null : pickImages,
+                            icon: Icon(Icons.add_photo_alternate_outlined),
+                            label: Text('选择图片'),
+                          ),
+                        ],
+                      ),
+                      if (images.isNotEmpty) ...[
+                        SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: images
+                              .map(
+                                (image) => _buildPickedImageTile(
+                                  image,
+                                  () =>
+                                      setSheetState(() => images.remove(image)),
                                 ),
                               )
-                            : Icon(Icons.send),
-                        label: Text(isSubmitting ? '提交中...' : '提交评价'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.primaryPink,
-                          foregroundColor: AppTheme.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(24),
+                              .toList(),
+                        ),
+                      ],
+                      SizedBox(height: 20),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: ElevatedButton.icon(
+                          onPressed: isSubmitting ? null : submitReview,
+                          icon: isSubmitting
+                              ? SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: AppTheme.white,
+                                  ),
+                                )
+                              : Icon(Icons.send),
+                          label: Text(isSubmitting ? '提交中...' : '提交评价'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primaryPink,
+                            foregroundColor: AppTheme.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(24),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             );
@@ -1483,7 +1491,10 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
               final remainCount = 5 - images.length;
               if (remainCount <= 0) return;
 
-              final picked = await ImagePicker().pickMultiImage();
+              final picked = await ImagePicker().pickMultiImage(
+                maxWidth: 1600,
+                imageQuality: 70,
+              );
               if (picked.isEmpty) return;
 
               setSheetState(() {
@@ -1525,126 +1536,130 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
               }
             }
 
-            return Padding(
-              padding: EdgeInsets.only(
-                left: 10,
-                right: 10,
-                top: 9,
-                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-              ),
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            '投诉',
-                            style: TextStyle(
-                              color: AppTheme.textDark,
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: '关闭',
-                          onPressed: () => Navigator.pop(sheetContext),
-                          icon: Icon(Icons.close),
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: 8),
-                    _buildOrderInfoRow(Icons.storefront, order.salonName),
-                    SizedBox(height: 6),
-                    _buildOrderInfoRow(Icons.content_cut, order.serviceName),
-                    SizedBox(height: 18),
-                    TextField(
-                      controller: complaintController,
-                      maxLines: 5,
-                      maxLength: 300,
-                      decoration: InputDecoration(
-                        hintText: '请描述遇到的问题...',
-                        filled: true,
-                        fillColor: AppTheme.bgCream,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: AppTheme.accentBeige),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: AppTheme.accentBeige),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(
-                              color: AppTheme.primaryPink, width: 1.4),
-                        ),
-                      ),
-                    ),
-                    SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            '上传图片 ${images.length}/5',
-                            style: TextStyle(
-                              color: AppTheme.textDark,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        TextButton.icon(
-                          onPressed: images.length >= 5 ? null : pickImages,
-                          icon: Icon(Icons.add_photo_alternate_outlined),
-                          label: Text('选择图片'),
-                        ),
-                      ],
-                    ),
-                    if (images.isNotEmpty) ...[
-                      SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: images
-                            .map(
-                              (image) => _buildPickedImageTile(
-                                image,
-                                () => setSheetState(() => images.remove(image)),
+            return SafeArea(
+              top: false,
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 10,
+                  right: 10,
+                  top: 9,
+                  bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '投诉',
+                              style: TextStyle(
+                                color: AppTheme.textDark,
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
                               ),
-                            )
-                            .toList(),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: '关闭',
+                            onPressed: () => Navigator.pop(sheetContext),
+                            icon: Icon(Icons.close),
+                          ),
+                        ],
                       ),
-                    ],
-                    SizedBox(height: 20),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 48,
-                      child: ElevatedButton.icon(
-                        onPressed: isSubmitting ? null : submitComplaint,
-                        icon: isSubmitting
-                            ? SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: AppTheme.white,
+                      SizedBox(height: 8),
+                      _buildOrderInfoRow(Icons.storefront, order.salonName),
+                      SizedBox(height: 6),
+                      _buildOrderInfoRow(Icons.content_cut, order.serviceName),
+                      SizedBox(height: 18),
+                      TextField(
+                        controller: complaintController,
+                        maxLines: 5,
+                        maxLength: 300,
+                        decoration: InputDecoration(
+                          hintText: '请描述遇到的问题...',
+                          filled: true,
+                          fillColor: AppTheme.bgCream,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: AppTheme.accentBeige),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: AppTheme.accentBeige),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                                color: AppTheme.primaryPink, width: 1.4),
+                          ),
+                        ),
+                      ),
+                      SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '上传图片 ${images.length}/5',
+                              style: TextStyle(
+                                color: AppTheme.textDark,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: images.length >= 5 ? null : pickImages,
+                            icon: Icon(Icons.add_photo_alternate_outlined),
+                            label: Text('选择图片'),
+                          ),
+                        ],
+                      ),
+                      if (images.isNotEmpty) ...[
+                        SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: images
+                              .map(
+                                (image) => _buildPickedImageTile(
+                                  image,
+                                  () =>
+                                      setSheetState(() => images.remove(image)),
                                 ),
                               )
-                            : Icon(Icons.send),
-                        label: Text(isSubmitting ? '提交中...' : '提交投诉'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.primaryPink,
-                          foregroundColor: AppTheme.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(24),
+                              .toList(),
+                        ),
+                      ],
+                      SizedBox(height: 20),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: ElevatedButton.icon(
+                          onPressed: isSubmitting ? null : submitComplaint,
+                          icon: isSubmitting
+                              ? SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: AppTheme.white,
+                                  ),
+                                )
+                              : Icon(Icons.send),
+                          label: Text(isSubmitting ? '提交中...' : '提交投诉'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primaryPink,
+                            foregroundColor: AppTheme.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(24),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             );

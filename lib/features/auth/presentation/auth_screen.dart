@@ -157,7 +157,8 @@ class _AuthScreenState extends State<AuthScreen> {
       borderRadius: BorderRadius.circular(8),
       child: Stack(
         children: [
-          AppImages.placeholder(
+          Image.asset(
+            'assets/images/auth_hero.png',
             height: 260,
             width: double.infinity,
             fit: BoxFit.cover,

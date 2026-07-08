@@ -20,6 +20,10 @@ class LocationPositionService {
   static bool _configured = false;
 
   static Future<Position> currentPosition() async {
+    if (kIsWeb && !isSecureBrowserLocationOrigin(Uri.base)) {
+      throw Exception('浏览器定位需要 HTTPS 或 localhost，请手动选择地址');
+    }
+
     final serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) throw Exception('定位服务未开启');
 
@@ -32,13 +36,6 @@ class LocationPositionService {
       throw Exception('未获得定位权限');
     }
 
-    final cachedPosition = await Geolocator.getLastKnownPosition();
-    if (cachedPosition != null &&
-        DateTime.now().difference(cachedPosition.timestamp) <=
-            _cachedPositionMaxAge) {
-      return cachedPosition;
-    }
-
     if (kIsWeb ||
         (defaultTargetPlatform != TargetPlatform.android &&
             defaultTargetPlatform != TargetPlatform.iOS)) {
@@ -47,6 +44,13 @@ class LocationPositionService {
           accuracy: LocationAccuracy.high,
         ),
       );
+    }
+
+    final cachedPosition = await Geolocator.getLastKnownPosition();
+    if (cachedPosition != null &&
+        DateTime.now().difference(cachedPosition.timestamp) <=
+            _cachedPositionMaxAge) {
+      return cachedPosition;
     }
 
     _configureAmap();
@@ -97,6 +101,15 @@ class LocationPositionService {
     AMapFlutterLocation.setApiKey(_androidKey, _iosKey);
     _configured = true;
   }
+}
+
+bool isSecureBrowserLocationOrigin(Uri uri) {
+  final host = uri.host.toLowerCase();
+  return uri.scheme == 'https' ||
+      host == 'localhost' ||
+      host.endsWith('.localhost') ||
+      host == '127.0.0.1' ||
+      host == '::1';
 }
 
 Position positionFromAmapResult(Map<String, Object> result) {

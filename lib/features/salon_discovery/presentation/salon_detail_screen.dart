@@ -1,6 +1,8 @@
 import 'package:flutter/gestures.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../features/booking/presentation/booking_screen.dart';
 import '../../../features/booking/domain/booking_model.dart';
 import '../data/favorite_salon_store.dart';
@@ -95,9 +97,10 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
-            expandedHeight: 200,
+            expandedHeight: 128,
             pinned: true,
             backgroundColor: AppTheme.white,
+            iconTheme: IconThemeData(color: AppTheme.white),
             flexibleSpace: Stack(
               fit: StackFit.expand,
               children: [
@@ -150,12 +153,12 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
             ),
           ),
           SliverToBoxAdapter(
-            child: Padding(
-              padding: EdgeInsets.all(10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: EdgeInsets.all(10),
+                  child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Column(
@@ -202,48 +205,51 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
                       ),
                     ],
                   ),
-                  SizedBox(height: 25),
-                  _buildSectionTitle('店铺信息'),
-                  SizedBox(height: 15),
-                  _buildSalonInfo(salon),
-                  _buildPromoImagesSection(salon),
-                  SizedBox(height: 30),
-                  _buildSectionTitle('关于我们'),
-                  SizedBox(height: 10),
-                  Text(
-                    salon['fullDescription'] ?? '暂无详细描述',
-                    style: TextStyle(
-                      color: Colors.grey[700],
-                      height: 1.6,
-                      fontSize: 15,
-                    ),
+                ),
+                SizedBox(height: 25),
+                _buildPromoImagesSection(salon),
+                Padding(
+                  padding: EdgeInsets.fromLTRB(10, 15, 10, 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildSectionTitle('店铺信息'),
+                      SizedBox(height: 15),
+                      _buildSalonInfo(salon),
+                      SizedBox(height: 30),
+                      _buildSectionTitle('关于我们'),
+                      SizedBox(height: 10),
+                      Text(
+                        salon['fullDescription'] ?? '暂无详细描述',
+                        style: TextStyle(
+                          color: Colors.grey[700],
+                          height: 1.6,
+                          fontSize: 15,
+                        ),
+                      ),
+                      SizedBox(height: 30),
+                      _buildSectionTitle('热门套餐'),
+                      SizedBox(height: 15),
+                      if (_list(salon['services']).isNotEmpty)
+                        ..._list(salon['services']).map(_buildServiceItem)
+                      else
+                        Text('暂无可用套餐', style: TextStyle(color: Colors.grey)),
+                      SizedBox(height: 30),
+                      _buildSectionTitle('我们的理发师'),
+                      SizedBox(height: 15),
+                      if (_list(salon['staff']).isNotEmpty)
+                        _buildStaffList(salon)
+                      else
+                        Text('暂无发型师信息', style: TextStyle(color: Colors.grey)),
+                      SizedBox(height: 30),
+                      _buildSectionTitle('客户评价'),
+                      SizedBox(height: 15),
+                      _buildSalonReviews(salon),
+                      SizedBox(height: MediaQuery.sizeOf(context).height * 0.2),
+                    ],
                   ),
-                  SizedBox(height: 30),
-                  _buildSectionTitle('热门套餐'),
-                  SizedBox(height: 15),
-                  if (salon['services'] != null &&
-                      (salon['services'] as List).isNotEmpty)
-                    ...((salon['services'] as List)
-                        .take(3)
-                        .map((service) => _buildServiceItem(service))
-                        .toList())
-                  else
-                    Text('暂无可用套餐', style: TextStyle(color: Colors.grey)),
-                  SizedBox(height: 30),
-                  _buildSectionTitle('我们的理发师'),
-                  SizedBox(height: 15),
-                  if (salon['staff'] != null &&
-                      (salon['staff'] as List).isNotEmpty)
-                    _buildStaffList(salon)
-                  else
-                    Text('暂无发型师信息', style: TextStyle(color: Colors.grey)),
-                  SizedBox(height: 30),
-                  _buildSectionTitle('客户评价'),
-                  SizedBox(height: 15),
-                  _buildSalonReviews(salon),
-                  SizedBox(height: MediaQuery.sizeOf(context).height * 0.2),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ],
@@ -284,17 +290,16 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
   }
 
   StaffProfile _parseStaffProfile(dynamic staffData, dynamic allReviews) {
-    final String staffId = staffData['id'].toString();
+    final data = staffData is Map ? staffData : const {};
+    final String staffId = data['id']?.toString() ?? '';
     List<Review> staffReviews = [];
 
-    if (staffData is Map &&
-        staffData.containsKey('reviews') &&
-        staffData['reviews'] is List) {
-      staffReviews = (staffData['reviews'] as List)
+    if (data['reviews'] is List) {
+      staffReviews = (data['reviews'] as List)
           .map(
             (rev) => Review(
               userName: (rev['user'] ?? rev['userName'] ?? '未知用户'),
-              rating: (rev['rating'] ?? 0.0).toDouble(),
+              rating: _parseDouble(rev['rating']),
               comment: rev['comment'] ?? '',
               date: rev['date'] ?? '',
               imageUrls: (rev['imageUrls'] as List?)
@@ -310,7 +315,7 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
           .map(
             (rev) => Review(
               userName: (rev['user'] ?? rev['userName'] ?? '未知用户'),
-              rating: (rev['rating'] ?? 0.0).toDouble(),
+              rating: _parseDouble(rev['rating']),
               comment: rev['comment'] ?? '',
               date: rev['date'] ?? '',
               imageUrls: (rev['imageUrls'] as List?)
@@ -324,29 +329,30 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
 
     return StaffProfile(
       id: staffId,
-      name: staffData['name'] ?? '未知发型师',
-      role: staffData['role'] ?? (staffData['experience'] ?? '发型师'),
-      experience: staffData['experience'] ?? '暂无经验描述',
-      extraServiceFee: _parseInt(staffData['extraServiceFee']),
-      imageUrl: staffData['imageUrl'] ?? SalonAssets.placeholder,
-      bio: staffData['bio'] ?? '暂无个人简介',
-      rating: (staffData['rating'] ?? 0.0).toDouble(),
+      name: data['name'] ?? '未知发型师',
+      role: data['role'] ?? (data['experience'] ?? '发型师'),
+      experience: data['experience'] ?? '暂无经验描述',
+      extraServiceFee: _parseInt(data['extraServiceFee']),
+      imageUrl: data['imageUrl'] ?? SalonAssets.placeholder,
+      bio: data['bio'] ?? '暂无个人简介',
+      rating: _parseDouble(data['rating']),
       reviews: staffReviews,
     );
   }
 
   SalonService _parseSalonService(dynamic serviceData) {
-    final duration = serviceData['duration']?.toString() ?? '';
+    final data = serviceData is Map ? serviceData : const {};
+    final duration = data['duration']?.toString() ?? '';
     final minutes =
         int.tryParse(duration.replaceAll(RegExp(r'[^0-9]'), '')) ?? 60;
 
     return SalonService(
-      id: serviceData['id']?.toString() ?? '',
-      name: serviceData['name']?.toString() ?? '未知服务',
+      id: data['id']?.toString() ?? '',
+      name: data['name']?.toString() ?? '未知服务',
       durationMinutes: minutes,
-      imageUrl: serviceData['imageUrl']?.toString() ?? '',
-      note: serviceData['note']?.toString() ?? '',
-      priceLabel: serviceData['price']?.toString() ?? '',
+      imageUrl: data['imageUrl']?.toString() ?? '',
+      note: data['note']?.toString() ?? '',
+      priceLabel: data['price']?.toString() ?? '',
     );
   }
 
@@ -354,11 +360,10 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
     final salon = _salon;
     if (salon == null) return;
 
-    final staffProfiles = (salon['staff'] as List)
+    final staffProfiles = _list(salon['staff'])
         .map((s) => _parseStaffProfile(s, salon['reviews']))
         .toList();
-    final services =
-        (salon['services'] as List? ?? []).map(_parseSalonService).toList();
+    final services = _list(salon['services']).map(_parseSalonService).toList();
 
     Navigator.push(
       context,
@@ -384,18 +389,15 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
         Container(
           width: 4,
           height: 20,
-          decoration: BoxDecoration(
-            color: AppTheme.primaryPink,
-            borderRadius: BorderRadius.circular(2),
-          ),
+          color: Color(0xFF65524D),
         ),
         SizedBox(width: 10),
         Text(
           title,
           style: TextStyle(
-            fontSize: 20,
+            fontSize: 14,
             fontWeight: FontWeight.bold,
-            color: AppTheme.textDark,
+            color: Color(0xFF65524D),
             letterSpacing: 0.5,
           ),
         ),
@@ -404,6 +406,9 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
   }
 
   Widget _buildSalonInfo(Map<String, dynamic> salon) {
+    final phone = salon['phone']?.toString() ?? '';
+    final address = salon['address']?.toString() ?? '';
+
     return Container(
       width: double.infinity,
       padding: EdgeInsets.all(8),
@@ -417,20 +422,36 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
           _buildInfoRow(
             Icons.phone,
             '电话',
-            salon['phone']?.toString().isNotEmpty == true
-                ? salon['phone'].toString()
-                : '暂无电话',
+            phone.isNotEmpty ? phone : '暂无电话',
+            onTap: phone.isNotEmpty ? () => _callPhone(phone) : null,
           ),
           SizedBox(height: 14),
           _buildInfoRow(
             Icons.location_on,
             '地址',
-            salon['address']?.toString().isNotEmpty == true
-                ? salon['address'].toString()
-                : '地址未知',
+            address.isNotEmpty ? address : '地址未知',
+            onTap: address.isNotEmpty ? () => _copyAddress(address) : null,
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _callPhone(String phone) async {
+    final uri = Uri(scheme: 'tel', path: phone);
+    if (!await launchUrl(uri)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        topSnackBar(context, '无法拨打电话'),
+      );
+    }
+  }
+
+  Future<void> _copyAddress(String address) async {
+    await Clipboard.setData(ClipboardData(text: address));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('地址复制成功')),
     );
   }
 
@@ -438,14 +459,11 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
     final promoImages = _promoImageUrls(salon);
     if (promoImages.isEmpty) return SizedBox.shrink();
 
-    return Padding(
-      padding: EdgeInsets.only(top: 8),
-      child: _SalonDetailImageCarousel(images: promoImages),
-    );
+    return _SalonDetailImageCarousel(images: promoImages);
   }
 
   Widget _buildSalonRatingSummary(Map<String, dynamic> salon) {
-    final rating = (salon['rating'] ?? 0.0).toDouble();
+    final rating = _parseDouble(salon['rating']);
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -541,6 +559,8 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
     if (value is num) return value.toDouble();
     return double.tryParse(value?.toString() ?? '') ?? 0.0;
   }
+
+  List _list(dynamic value) => value is List ? value : const [];
 
   String _coverImageUrl(Map<String, dynamic> salon) {
     final image = salon['image']?.toString().trim() ?? '';
@@ -666,6 +686,7 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
                       review['userName']?.toString() ?? '匿名用户',
                       style: TextStyle(
                         color: AppTheme.textDark,
+                        fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -675,14 +696,14 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
                         if (serviceName.isNotEmpty) serviceName,
                         if (staffName.isNotEmpty) staffName,
                       ].join(' · '),
-                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                      style: TextStyle(color: Colors.grey[600], fontSize: 13),
                     ),
                   ],
                 ),
               ),
               Text(
                 review['date']?.toString() ?? '',
-                style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                style: TextStyle(color: Colors.grey[500], fontSize: 13),
               ),
             ],
           ),
@@ -694,7 +715,7 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
               review['comment'].toString(),
               style: TextStyle(
                 color: Colors.grey[700],
-                fontSize: 14,
+                fontSize: 15,
                 height: 1.45,
               ),
             ),
@@ -706,23 +727,26 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
               runSpacing: 8,
               children: imageUrls
                   .map(
-                    (url) => ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: CachedNetworkImage(
-                        imageUrl: url,
-                        width: 72,
-                        height: 72,
-                        fit: BoxFit.cover,
-                        memCacheWidth: 180,
-                        filterQuality: FilterQuality.low,
-                        fadeInDuration: Duration.zero,
-                        fadeOutDuration: Duration.zero,
-                        errorWidget: (context, url, error) => Container(
+                    (url) => GestureDetector(
+                      onTap: () => _showReviewImage(context, url),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: CachedNetworkImage(
+                          imageUrl: url,
                           width: 72,
                           height: 72,
-                          color: Colors.grey[200],
-                          child: Icon(Icons.image_not_supported,
-                              color: Colors.grey[500], size: 20),
+                          fit: BoxFit.cover,
+                          memCacheWidth: 180,
+                          filterQuality: FilterQuality.low,
+                          fadeInDuration: Duration.zero,
+                          fadeOutDuration: Duration.zero,
+                          errorWidget: (context, url, error) => Container(
+                            width: 72,
+                            height: 72,
+                            color: Colors.grey[200],
+                            child: Icon(Icons.image_not_supported,
+                                color: Colors.grey[500], size: 20),
+                          ),
                         ),
                       ),
                     ),
@@ -751,7 +775,7 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
                         '商家回复',
                         style: TextStyle(
                           color: AppTheme.textDark,
-                          fontSize: 13,
+                          fontSize: 14,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
@@ -762,7 +786,7 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
                     merchantReply,
                     style: TextStyle(
                       color: Colors.grey[700],
-                      fontSize: 13,
+                      fontSize: 14,
                       height: 1.4,
                     ),
                   ),
@@ -775,12 +799,55 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
     );
   }
 
+  void _showReviewImage(BuildContext context, String url) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => Dialog.fullscreen(
+        backgroundColor: Colors.black,
+        child: Stack(
+          children: [
+            Center(
+              child: InteractiveViewer(
+                minScale: 0.8,
+                maxScale: 4,
+                child: CachedNetworkImage(
+                  imageUrl: url,
+                  fit: BoxFit.contain,
+                  errorWidget: (context, url, error) => Icon(
+                    Icons.image_not_supported,
+                    color: Colors.white70,
+                    size: 48,
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              top: MediaQuery.paddingOf(context).top + 8,
+              right: 8,
+              child: IconButton(
+                tooltip: '关闭',
+                onPressed: () => Navigator.pop(context),
+                icon: Icon(Icons.close, color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   String _merchantReplyText(dynamic value) {
     if (value is Map) return value['content']?.toString() ?? '';
     return value?.toString() ?? '';
   }
 
-  Widget _buildInfoRow(IconData icon, String label, String value) {
+  Widget _buildInfoRow(
+    IconData icon,
+    String label,
+    String value, {
+    VoidCallback? onTap,
+    Widget? trailing,
+  }) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -798,21 +865,25 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
           ),
         ),
         Expanded(
-          child: Text(
-            value,
-            style: TextStyle(
-              color: AppTheme.textDark,
-              fontSize: 14,
-              height: 1.35,
+          child: InkWell(
+            onTap: onTap,
+            child: Text(
+              value,
+              style: TextStyle(
+                color: onTap == null ? AppTheme.textDark : AppTheme.primaryPink,
+                fontSize: 14,
+                height: 1.35,
+              ),
             ),
           ),
         ),
+        if (trailing != null) trailing,
       ],
     );
   }
 
   Widget _buildStaffList(Map<String, dynamic> salon) {
-    final staffList = salon['staff'] as List;
+    final staffList = _list(salon['staff']);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -826,7 +897,7 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
             },
           ),
           child: SizedBox(
-            height: 260,
+            height: 365,
             child: ListView.separated(
               controller: _staffScrollController,
               scrollDirection: Axis.horizontal,
@@ -852,9 +923,10 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
     Map<String, dynamic> salon,
   ) {
     final profile = _parseStaffProfile(staff, allReviews);
-    const cardWidth = 140.0;
-    const imageHeight = 187.0;
-    const cardRadius = 10.0;
+    const cardScale = 4 / 3;
+    const cardWidth = 140.0 * cardScale * 4 / 3 * 7 / 8;
+    const imageHeight = 187.0 * cardScale;
+    const cardRadius = 10.0 * cardScale;
     return RepaintBoundary(
       child: GestureDetector(
         onTap: () {
@@ -864,12 +936,11 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
               builder: (context) => StaffDetailScreen(
                 staffId: profile.id,
                 staffProfile: profile,
-                allStaffInSalon: (salon['staff'] as List)
+                allStaffInSalon: _list(salon['staff'])
                     .map((s) => _parseStaffProfile(s, salon['reviews']))
                     .toList(),
-                initialServices: (salon['services'] as List? ?? [])
-                    .map(_parseSalonService)
-                    .toList(),
+                initialServices:
+                    _list(salon['services']).map(_parseSalonService).toList(),
               ),
             ),
           );
@@ -914,7 +985,7 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
                       ),
               ),
               Padding(
-                padding: EdgeInsets.all(4),
+                padding: EdgeInsets.all(6),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -922,7 +993,7 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
                       profile.name,
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        fontSize: 15,
+                        fontSize: 17,
                         color: AppTheme.textDark,
                       ),
                       maxLines: 1,
@@ -930,13 +1001,24 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
                     ),
                     SizedBox(height: 3),
                     SizedBox(
-                      height: 30,
+                      height: 34,
                       child: Text(
                         profile.role,
-                        style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                        style: TextStyle(color: Colors.grey[600], fontSize: 14),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
+                    ),
+                    SizedBox(height: 4),
+                    Text(
+                      profile.bio,
+                      style: TextStyle(
+                        color: Colors.grey[700],
+                        fontSize: 13,
+                        height: 1.25,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
@@ -949,9 +1031,10 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
   }
 
   Widget _buildServiceItem(dynamic service) {
-    final note = service['note']?.toString() ?? '';
-    final imageUrl = service['imageUrl']?.toString() ?? '';
-    final serviceId = service['id']?.toString();
+    final data = service is Map ? service : const {};
+    final note = data['note']?.toString() ?? '';
+    final imageUrl = data['imageUrl']?.toString() ?? '';
+    final serviceId = data['id']?.toString();
 
     return GestureDetector(
       onTap: serviceId == null
@@ -990,9 +1073,10 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              service['name'] ?? '未知服务',
+                              data['name'] ?? '未知服务',
                               style: TextStyle(
                                 fontWeight: FontWeight.w500,
+                                fontSize: 16,
                                 color: AppTheme.textDark,
                               ),
                             ),
@@ -1002,7 +1086,7 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
                                 note,
                                 style: TextStyle(
                                   color: Colors.grey[600],
-                                  fontSize: 12,
+                                  fontSize: 13,
                                   height: 1.35,
                                 ),
                               ),
@@ -1015,14 +1099,15 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
                           Text(
-                            service['duration'] ?? '',
-                            style: TextStyle(color: Colors.grey, fontSize: 12),
+                            data['duration'] ?? '',
+                            style: TextStyle(color: Colors.grey, fontSize: 13),
                           ),
                           SizedBox(height: 8),
                           Text(
-                            service['price'] ?? '免费',
+                            data['price'] ?? '免费',
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
+                              fontSize: 16,
                               color: AppTheme.primaryPink,
                             ),
                           ),
@@ -1040,14 +1125,16 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
   }
 
   Widget _buildServiceImage(String imageUrl) {
+    const imageSize = 101.0;
+
     return ClipRRect(
       borderRadius: BorderRadius.circular(10),
       child: Container(
-        width: 76,
-        height: 76,
+        width: imageSize,
+        height: imageSize,
         color: Colors.grey[200],
         child: imageUrl.isEmpty
-            ? AppImages.placeholder(width: 76, height: 76)
+            ? AppImages.placeholder(width: imageSize, height: imageSize)
             : CachedNetworkImage(
                 imageUrl: imageUrl,
                 fit: BoxFit.cover,
@@ -1056,7 +1143,7 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
                 fadeInDuration: Duration.zero,
                 fadeOutDuration: Duration.zero,
                 errorWidget: (context, url, error) =>
-                    AppImages.placeholder(width: 76, height: 76),
+                    AppImages.placeholder(width: imageSize, height: imageSize),
               ),
       ),
     );
@@ -1101,38 +1188,36 @@ class _SalonDetailImageCarouselState extends State<_SalonDetailImageCarousel> {
 
   @override
   Widget build(BuildContext context) {
+    final imageHeight = MediaQuery.sizeOf(context).width * 9 / 16 + 65;
+
     if (widget.images.length == 1) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(15),
-        child: AspectRatio(
-          aspectRatio: 16 / 9,
-          child: _buildImage(widget.images.first),
-        ),
+      return SizedBox(
+        width: double.infinity,
+        height: imageHeight,
+        child: _buildImage(widget.images.first),
       );
     }
 
     return Column(
       children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(15),
-          child: AspectRatio(
-            aspectRatio: 16 / 9,
-            child: ScrollConfiguration(
-              behavior: ScrollConfiguration.of(context).copyWith(
-                dragDevices: {
-                  PointerDeviceKind.touch,
-                  PointerDeviceKind.mouse,
-                  PointerDeviceKind.trackpad,
-                },
-              ),
-              child: PageView.builder(
-                controller: _pageController,
-                itemCount: widget.images.length,
-                physics: BouncingScrollPhysics(),
-                onPageChanged: (index) => setState(() => _currentIndex = index),
-                itemBuilder: (context, index) =>
-                    _buildImage(widget.images[index]),
-              ),
+        SizedBox(
+          width: double.infinity,
+          height: imageHeight,
+          child: ScrollConfiguration(
+            behavior: ScrollConfiguration.of(context).copyWith(
+              dragDevices: {
+                PointerDeviceKind.touch,
+                PointerDeviceKind.mouse,
+                PointerDeviceKind.trackpad,
+              },
+            ),
+            child: PageView.builder(
+              controller: _pageController,
+              itemCount: widget.images.length,
+              physics: BouncingScrollPhysics(),
+              onPageChanged: (index) => setState(() => _currentIndex = index),
+              itemBuilder: (context, index) =>
+                  _buildImage(widget.images[index]),
             ),
           ),
         ),

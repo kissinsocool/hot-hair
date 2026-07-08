@@ -67,7 +67,14 @@ class SalonRepository {
       if (service is Map) service['imageUrl'] = media(service['imageUrl']);
     }
     for (final staff in (salon['staff'] as List?) ?? const []) {
-      if (staff is Map) staff['imageUrl'] = media(staff['imageUrl']);
+      if (staff is Map) {
+        staff['imageUrl'] = media(staff['imageUrl']);
+        for (final review in (staff['reviews'] as List?) ?? const []) {
+          if (review is Map) {
+            review['imageUrls'] = mediaList(review['imageUrls']);
+          }
+        }
+      }
     }
     for (final review in (salon['reviews'] as List?) ?? const []) {
       if (review is Map) review['imageUrls'] = mediaList(review['imageUrls']);

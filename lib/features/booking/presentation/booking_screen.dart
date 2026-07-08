@@ -6,6 +6,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/network/router.dart';
 import 'booking_notifier.dart';
 import '../domain/booking_model.dart';
+import '../domain/staff_experience_formatter.dart';
 import '../domain/staff_model.dart';
 
 class BookingScreen extends ConsumerStatefulWidget {
@@ -284,6 +285,8 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
     final isSelected = selectedStaffId == staff.id;
     final isNoPreference = staff.id == _noPreferenceStaffId;
     final isAssetImage = staff.imageUrl.startsWith('assets/');
+    final experience =
+        formatStaffExperience(staff.experience).split('|').first.trim();
 
     return GestureDetector(
       onTap: () {
@@ -294,10 +297,10 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
       },
       child: Container(
         margin: EdgeInsets.only(bottom: 6),
-        padding: EdgeInsets.all(7.5),
+        padding: EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: AppTheme.white,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(
               color: isSelected ? AppTheme.primaryPink : AppTheme.accentBeige),
           boxShadow: [
@@ -308,31 +311,30 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
           ],
         ),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            CircleAvatar(
-              radius: 30,
-              backgroundColor: isNoPreference
+            Container(
+              width: 104,
+              height: 130,
+              color: isNoPreference
                   ? AppTheme.primaryPink.withOpacity(0.12)
-                  : Colors.transparent,
-              backgroundImage: isNoPreference || isAssetImage
-                  ? null
-                  : NetworkImage(staff.imageUrl),
+                  : Colors.grey[200],
               child: isNoPreference
                   ? Icon(
                       Icons.question_mark,
                       color: AppTheme.primaryPink,
-                      size: 30,
+                      size: 36,
                     )
                   : isAssetImage
-                      ? ClipOval(
-                          child: AppImages.placeholder(
-                            width: 60,
-                            height: 60,
-                          ),
-                        )
-                      : null,
+                      ? AppImages.placeholder(width: 104, height: 130)
+                      : Image.network(
+                          staff.imageUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) =>
+                              AppImages.placeholder(width: 104, height: 130),
+                        ),
             ),
-            SizedBox(width: 15),
+            SizedBox(width: 14),
             Expanded(
               child: isNoPreference
                   ? Text(
@@ -347,12 +349,15 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(staff.name,
-                                style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                    color: AppTheme.textDark)),
+                            Expanded(
+                              child: Text(staff.name,
+                                  style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 18,
+                                      color: AppTheme.textDark)),
+                            ),
                             if (staff.extraServiceFee > 0) ...[
                               SizedBox(width: 8),
                               Container(
@@ -376,12 +381,29 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
                           ],
                         ),
                         SizedBox(height: 4),
-                        Text(staff.role,
+                        Text(
+                          experience.isEmpty
+                              ? staff.role
+                              : '${staff.role}（$experience）',
+                          style:
+                              TextStyle(color: Colors.grey[600], fontSize: 13),
+                        ),
+                        if (staff.bio.isNotEmpty) ...[
+                          SizedBox(height: 8),
+                          Text(
+                            staff.bio,
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                                color: Colors.grey[600], fontSize: 13)),
+                                color: AppTheme.textDark,
+                                fontSize: 14,
+                                height: 1.35),
+                          ),
+                        ],
                       ],
                     ),
             ),
+            SizedBox(width: 8),
             Icon(Icons.check_circle,
                 color: isSelected ? AppTheme.primaryPink : Colors.grey[300],
                 size: 24),
@@ -469,18 +491,19 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
                   Text(service.name,
                       style: TextStyle(
                           fontWeight: FontWeight.w500,
+                          fontSize: 16,
                           color: AppTheme.textDark)),
                   if (service.note.isNotEmpty) ...[
                     SizedBox(height: 5),
                     Text(
                       service.note,
                       style: TextStyle(
-                          color: Colors.grey[600], fontSize: 12, height: 1.35),
+                          color: Colors.grey[600], fontSize: 14, height: 1.35),
                     ),
                   ],
                   SizedBox(height: 6),
                   Text('${service.durationMinutes} min',
-                      style: TextStyle(color: Colors.grey, fontSize: 12)),
+                      style: TextStyle(color: Colors.grey, fontSize: 13)),
                 ],
               ),
             ),
@@ -493,7 +516,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
                     style: TextStyle(
                         color: AppTheme.primaryPink,
                         fontWeight: FontWeight.bold,
-                        fontSize: 13),
+                        fontSize: 15),
                   ),
                   SizedBox(width: 15),
                 ],
