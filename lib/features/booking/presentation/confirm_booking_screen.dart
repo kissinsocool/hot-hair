@@ -152,10 +152,10 @@ class ConfirmBookingScreen extends ConsumerWidget {
     }
 
     final success = await notifier.confirmBooking(
-        state.selectedStaff!.id, state.selectedService!.id, state.selectedTime!,
-        candidateStaffIds: state.selectedStaff!.id == '__no_preference__'
-            ? state.noPreferenceCandidateStaffIds
-            : const []);
+      state.selectedStaff!.id,
+      state.selectedService!.id,
+      state.selectedTime!,
+    );
 
     if (!context.mounted) return;
 

@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hot_pepper_clone/features/booking/data/booking_message_read_store.dart';
-import 'package:hot_pepper_clone/features/booking/domain/booking_order.dart';
+import 'package:hot_hair_app/features/booking/data/booking_message_read_store.dart';
+import 'package:hot_hair_app/features/booking/domain/booking_order.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {

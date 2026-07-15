@@ -10,6 +10,7 @@ import '../domain/staff_experience_formatter.dart';
 import '../domain/staff_model.dart';
 
 class BookingScreen extends ConsumerStatefulWidget {
+  final String salonId;
   final List<StaffProfile>? initialStaffList;
   final List<SalonService>? initialServices;
   final String? preferredStaffId;
@@ -17,6 +18,7 @@ class BookingScreen extends ConsumerStatefulWidget {
 
   const BookingScreen(
       {super.key,
+      this.salonId = '',
       this.initialStaffList,
       this.initialServices,
       this.preferredStaffId,
@@ -52,11 +54,6 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
         ...staffList,
       ];
 
-  bool get _isNoPreferenceSelected => selectedStaffId == _noPreferenceStaffId;
-
-  List<String> get _candidateStaffIds =>
-      staffList.map((staff) => staff.id).toList();
-
   @override
   void initState() {
     super.initState();
@@ -78,9 +75,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
     selectedDate = _generateWeekDates()[0];
 
     Future.microtask(() {
-      ref
-          .read(bookingProvider.notifier)
-          .setNoPreferenceCandidateStaffIds(_candidateStaffIds);
+      ref.read(bookingProvider.notifier).setSalonId(widget.salonId);
       if (selectedStaffId != null) {
         final staff = _staffOptions.firstWhere((s) => s.id == selectedStaffId);
         ref.read(bookingProvider.notifier).selectStaff(staff);
@@ -103,8 +98,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
     ref.read(bookingProvider.notifier).loadAvailableSlots(
           date,
           selectedStaffId!,
-          candidateStaffIds:
-              _isNoPreferenceSelected ? _candidateStaffIds : const [],
+          salonId: widget.salonId,
         );
   }
 

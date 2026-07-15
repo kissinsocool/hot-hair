@@ -3,6 +3,19 @@ import '../../../core/network/api_client.dart';
 class SalonRepository {
   final ApiClient _apiClient = ApiClient();
 
+  Future<Map<String, dynamic>> fetchAdCampaign() async {
+    try {
+      final response = await _apiClient.request('/ad');
+      final data = Map<String, dynamic>.from(response.data);
+      return {
+        'enabled': data['enabled'] != false,
+        'imageUrl': ApiClient.mediaUrl(data['imageUrl']?.toString() ?? ''),
+      };
+    } catch (_) {
+      return const {'enabled': true, 'imageUrl': ''};
+    }
+  }
+
   Future<List<Map<String, dynamic>>> fetchSalons({
     required double latitude,
     required double longitude,

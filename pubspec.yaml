@@ -1,4 +1,4 @@
-name: hot_pepper_clone
+name: hot_hair_app
 description: A high-end hair salon booking application.
 version: 1.0.0+1
 publish_to: 'none'
@@ -44,5 +44,7 @@ flutter:
   assets:
     - assets/images/salon_placeholder.svg
     - assets/images/auth_hero.png
+    - assets/images/ad.jpeg
+    - assets/images/ad/
     - assets/icons/
     - assets/icons_png/

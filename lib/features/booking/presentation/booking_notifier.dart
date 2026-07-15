@@ -10,7 +10,7 @@ class BookingState {
   final StaffProfile? selectedStaff;
   final DateTime? selectedDate;
   final String? selectedTime;
-  final List<String> noPreferenceCandidateStaffIds;
+  final String salonId;
   final bool isLoading;
 
   BookingState({
@@ -19,7 +19,7 @@ class BookingState {
     this.selectedStaff,
     this.selectedDate,
     this.selectedTime,
-    this.noPreferenceCandidateStaffIds = const [],
+    this.salonId = '',
     this.isLoading = false,
   });
 
@@ -29,7 +29,7 @@ class BookingState {
     StaffProfile? selectedStaff,
     DateTime? selectedDate,
     String? selectedTime,
-    List<String>? noPreferenceCandidateStaffIds,
+    String? salonId,
     bool? isLoading,
     bool clearSelectedTime = false,
   }) {
@@ -40,8 +40,7 @@ class BookingState {
       selectedDate: selectedDate ?? this.selectedDate,
       selectedTime:
           clearSelectedTime ? null : selectedTime ?? this.selectedTime,
-      noPreferenceCandidateStaffIds:
-          noPreferenceCandidateStaffIds ?? this.noPreferenceCandidateStaffIds,
+      salonId: salonId ?? this.salonId,
       isLoading: isLoading ?? this.isLoading,
     );
   }
@@ -55,16 +54,16 @@ class BookingNotifier extends StateNotifier<BookingState> {
   Future<void> loadAvailableSlots(
     DateTime date,
     String staffId, {
-    List<String> candidateStaffIds = const [],
+    String salonId = '',
   }) async {
     state = state.copyWith(isLoading: true);
     try {
       final dateStr = date.toIso8601String().split('T')[0];
-      final candidateQuery = candidateStaffIds.isEmpty
-          ? ''
-          : '&candidateStaffIds=${candidateStaffIds.join(',')}';
+      final salonQuery = staffId == '__no_preference__'
+          ? '&salonId=${Uri.encodeQueryComponent(salonId)}'
+          : '';
       final response = await _apiClient
-          .request('/staff/$staffId/slots?date=$dateStr$candidateQuery');
+          .request('/staff/$staffId/slots?date=$dateStr$salonQuery');
       final data = response.data as List;
 
       final now = DateTime.now();
@@ -94,8 +93,8 @@ class BookingNotifier extends StateNotifier<BookingState> {
     state = state.copyWith(selectedStaff: staff);
   }
 
-  void setNoPreferenceCandidateStaffIds(List<String> staffIds) {
-    state = state.copyWith(noPreferenceCandidateStaffIds: staffIds);
+  void setSalonId(String salonId) {
+    state = state.copyWith(salonId: salonId);
   }
 
   void selectDate(DateTime date) {
@@ -113,9 +112,8 @@ class BookingNotifier extends StateNotifier<BookingState> {
   Future<bool> confirmBooking(
     String staffId,
     String serviceId,
-    String time, {
-    List<String> candidateStaffIds = const [],
-  }) async {
+    String time,
+  ) async {
     if (state.selectedDate == null) return false;
 
     final parts = time.split(':');
@@ -132,18 +130,18 @@ class BookingNotifier extends StateNotifier<BookingState> {
 
     final booking = await createBooking(
       staffId: staffId,
+      salonId: state.salonId,
       serviceId: serviceId,
       startTime: startTime,
-      candidateStaffIds: candidateStaffIds,
     );
     return booking != null;
   }
 
   Future<BookingOrder?> createBooking({
     required String staffId,
+    required String salonId,
     required String serviceId,
     required DateTime startTime,
-    List<String> candidateStaffIds = const [],
   }) async {
     try {
       final response = await _apiClient.request(
@@ -151,10 +149,9 @@ class BookingNotifier extends StateNotifier<BookingState> {
         method: 'POST',
         data: {
           'staffId': staffId,
+          'salonId': salonId,
           'serviceId': serviceId,
           'startTime': startTime.toIso8601String(),
-          if (candidateStaffIds.isNotEmpty)
-            'candidateStaffIds': candidateStaffIds,
         },
       );
       if (response.statusCode == 201) {

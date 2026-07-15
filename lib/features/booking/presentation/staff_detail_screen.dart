@@ -10,6 +10,7 @@ import '../../../core/network/api_client.dart';
 
 class StaffDetailScreen extends ConsumerStatefulWidget {
   final String staffId;
+  final String? salonId;
   final StaffProfile? staffProfile;
   final List<StaffProfile>? allStaffInSalon; // 新增：接收店铺所有理发师
   final List<SalonService>? initialServices;
@@ -17,6 +18,7 @@ class StaffDetailScreen extends ConsumerStatefulWidget {
   const StaffDetailScreen({
     super.key,
     required this.staffId,
+    this.salonId,
     this.staffProfile,
     this.allStaffInSalon,
     this.initialServices,
@@ -31,6 +33,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
   StaffProfile? _fetchedStaff;
   List<StaffProfile>? _fetchedStaffInSalon;
   List<SalonService>? _fetchedServices;
+  String? _fetchedSalonId;
 
   @override
   void initState() {
@@ -68,6 +71,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
         _fetchedServices = (data['salonServices'] as List?)
             ?.map((item) => _parseSalonService(Map<String, dynamic>.from(item)))
             .toList();
+        _fetchedSalonId = data['salonId']?.toString();
         _isLoading = false;
       });
     } catch (e) {
@@ -303,6 +307,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                   context,
                   MaterialPageRoute(
                       builder: (context) => BookingScreen(
+                            salonId: widget.salonId ?? _fetchedSalonId ?? '',
                             initialStaffList:
                                 widget.allStaffInSalon ?? _fetchedStaffInSalon,
                             initialServices:

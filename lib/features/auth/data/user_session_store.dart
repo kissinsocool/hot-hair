@@ -19,7 +19,18 @@ class UserSessionStore {
   static Future<ClientAuthSession?> restore() async {
     final preferences = await SharedPreferences.getInstance();
     final token = preferences.getString(_tokenKey);
-    if (token == null || token.isEmpty) return null;
+    if (token == null || token.isEmpty) {
+      currentSession = const ClientAuthSession(
+        token: '',
+        user: ClientUser(
+          id: 'demo',
+          account: 'demo',
+          displayName: 'Demo 用户',
+          phone: 'demo',
+        ),
+      );
+      return currentSession;
+    }
 
     final session = ClientAuthSession(
       token: token,

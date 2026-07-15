@@ -1,9 +1,11 @@
-import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
+
+bool hasMorePages(int loaded, int pageLength, int pageSize, int? total) =>
+    pageLength > 0 && (total == null ? pageLength >= pageSize : loaded < total);
 
 class ApiClient {
   static String? authToken;
-  static const _developmentHost = '192.168.1.46';
+  static const _onlineApiBaseUrl = 'http://182.92.129.180:3000/api';
 
   final Dio _dio = Dio(BaseOptions(
     baseUrl: _apiBaseUrl,
@@ -15,11 +17,7 @@ class ApiClient {
   static String get _apiBaseUrl {
     const configured = String.fromEnvironment('API_BASE_URL');
     if (configured.isNotEmpty) return configured;
-
-    final host = kIsWeb
-        ? (Uri.base.host.isEmpty ? 'localhost' : Uri.base.host)
-        : _developmentHost;
-    return 'http://$host:3000/api';
+    return _onlineApiBaseUrl;
   }
 
   static String mediaUrl(String value) {
@@ -75,5 +73,27 @@ class ApiClient {
     } catch (e) {
       rethrow;
     }
+  }
+
+  Future<List<dynamic>> requestAllPages(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    int pageSize = 100,
+  }) async {
+    final items = <dynamic>[];
+    final limit = pageSize.clamp(1, 100);
+    // ponytail: preserves the current full-list UI; switch to load-more before lists exceed 10,000 rows.
+    for (var page = 1; page <= 100; page += 1) {
+      final response = await request(
+        path,
+        queryParameters: {...?queryParameters, 'page': page, 'limit': limit},
+      );
+      final pageItems =
+          response.data is List ? response.data as List : const [];
+      items.addAll(pageItems);
+      final total = int.tryParse(response.headers.value('x-total-count') ?? '');
+      if (!hasMorePages(items.length, pageItems.length, limit, total)) break;
+    }
+    return items;
   }
 }

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hot_pepper_clone/features/salon_discovery/data/location_reverse_geocode_repository.dart';
+import 'package:hot_hair_app/features/salon_discovery/data/location_reverse_geocode_repository.dart';
 
 void main() {
   test('parses AMap reverse geocode address', () {

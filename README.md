@@ -1,4 +1,4 @@
-# hot_pepper_clone
+# hot_hair_app
 
 A new Flutter project.
 

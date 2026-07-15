@@ -1,4 +1,4 @@
-package com.example.hot_pepper_clone
+package com.example.hot_hair_app
 
 import io.flutter.embedding.android.FlutterActivity
 

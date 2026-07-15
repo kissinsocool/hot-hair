@@ -5,8 +5,7 @@ class OrderRepository {
   final ApiClient _apiClient = ApiClient();
 
   Future<List<BookingOrder>> fetchUserBookings() async {
-    final response = await _apiClient.request('/bookings');
-    final data = response.data as List;
+    final data = await _apiClient.requestAllPages('/bookings');
     return data
         .map((item) => BookingOrder.fromJson(Map<String, dynamic>.from(item)))
         .toList();

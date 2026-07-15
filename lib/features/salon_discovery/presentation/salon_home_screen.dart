@@ -25,6 +25,7 @@ import '../data/location_reverse_geocode_repository.dart';
 import '../data/salon_repository.dart';
 import 'location_address_formatter.dart';
 import 'salon_address_formatter.dart';
+import 'ad_campaign_screen.dart';
 
 class SalonHomeScreen extends StatefulWidget {
   const SalonHomeScreen({super.key});
@@ -79,6 +80,8 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
   String _profileGender = '保密';
   String _profileAvatarUrl = '';
   bool _isSavingProfile = false;
+  bool _adEnabled = true;
+  String _adImageUrl = '';
 
   List<Map<String, dynamic>> get _filteredSalons {
     final keyword = _searchKeyword.trim().toLowerCase();
@@ -103,6 +106,7 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
       _locateUserOnceOnOpen();
     });
     _loadBookingMessageStatus();
+    _loadAdCampaign();
     BookingUpdateStream.instance.start();
     _bookingUpdateSubscription =
         BookingUpdateStream.instance.stream.listen((event) {
@@ -110,6 +114,15 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
           event['event'] == 'booking.updated') {
         _loadBookingMessageStatus();
       }
+    });
+  }
+
+  Future<void> _loadAdCampaign() async {
+    final ad = await _salonRepository.fetchAdCampaign();
+    if (!mounted) return;
+    setState(() {
+      _adEnabled = ad['enabled'] == true;
+      _adImageUrl = ad['imageUrl']?.toString() ?? '';
     });
   }
 
@@ -801,7 +814,8 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
     final visibleSalons = filteredSalons.take(_visibleSalonCount).toList();
     final headerCount =
         _isLoading || _errorMessage.isNotEmpty || visibleSalons.isEmpty ? 1 : 0;
-    final itemCount = 2 + headerCount + visibleSalons.length;
+    final adCount = _adEnabled ? 1 : 0;
+    final itemCount = 2 + adCount + headerCount + visibleSalons.length;
 
     return Column(
       children: [
@@ -820,6 +834,13 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
               keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
               itemCount: itemCount,
               itemBuilder: (context, index) {
+                if (_adEnabled && index == 0) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 11),
+                    child: AdCampaignBanner(imageUrl: _adImageUrl),
+                  );
+                }
+                index -= adCount;
                 if (index == 0) {
                   return Text(_salonsLoadedWithPosition ? '附近的店铺' : '推荐沙龙',
                       style: TextStyle(

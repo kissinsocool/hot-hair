@@ -8,6 +8,7 @@ import '../../features/booking/presentation/staff_detail_screen.dart';
 import '../../features/booking/presentation/confirm_booking_screen.dart';
 import '../../features/salon_discovery/presentation/service_detail_screen.dart';
 import '../../features/booking/presentation/user_booking_messages_screen.dart';
+import '../../features/salon_discovery/presentation/ad_campaign_screen.dart';
 
 class AppRouter {
   static const String home = '/';
@@ -18,6 +19,7 @@ class AppRouter {
   static const String confirm = '/confirm';
   static const String userMessages = '/booking-messages';
   static const String locationPicker = '/location-picker';
+  static const String adCampaign = '/ad';
 
   static final GoRouter router = GoRouter(
     initialLocation: home,
@@ -39,6 +41,10 @@ class AppRouter {
         },
       ),
       GoRoute(path: home, builder: (context, state) => const SalonHomeScreen()),
+      GoRoute(
+        path: adCampaign,
+        builder: (context, state) => const AdCampaignScreen(),
+      ),
       GoRoute(
         name: 'location_picker',
         path: locationPicker,

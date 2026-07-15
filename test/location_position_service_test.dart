@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:hot_pepper_clone/features/salon_discovery/data/location_position_service.dart';
+import 'package:hot_hair_app/features/salon_discovery/data/location_position_service.dart';
 
 void main() {
   test('detects browser origins that can use geolocation', () {

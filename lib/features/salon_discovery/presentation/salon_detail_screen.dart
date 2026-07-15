@@ -11,6 +11,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/top_snack_bar.dart';
 import '../../../features/booking/domain/staff_model.dart';
 import '../../../features/booking/presentation/staff_detail_screen.dart';
+import 'ad_campaign_screen.dart';
 
 class SalonDetailScreen extends StatefulWidget {
   final String salonId;
@@ -28,11 +29,23 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
   Map<String, dynamic>? _salon;
   String _errorMessage = '';
   int _visibleReviewCount = 3;
+  bool _adEnabled = true;
+  String _adImageUrl = '';
 
   @override
   void initState() {
     super.initState();
     _loadDetail();
+    _loadAdCampaign();
+  }
+
+  Future<void> _loadAdCampaign() async {
+    final ad = await _salonRepository.fetchAdCampaign();
+    if (!mounted) return;
+    setState(() {
+      _adEnabled = ad['enabled'] == true;
+      _adImageUrl = ad['imageUrl']?.toString() ?? '';
+    });
   }
 
   @override
@@ -97,65 +110,79 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
-            expandedHeight: 128,
             pinned: true,
             backgroundColor: AppTheme.white,
-            iconTheme: IconThemeData(color: AppTheme.white),
-            flexibleSpace: Stack(
-              fit: StackFit.expand,
-              children: [
-                coverImage.isEmpty
-                    ? AppImages.placeholder(width: double.infinity)
-                    : CachedNetworkImage(
-                        imageUrl: coverImage,
-                        fit: BoxFit.cover,
-                        alignment: Alignment.topCenter,
-                        memCacheWidth: 1100,
-                        filterQuality: FilterQuality.low,
-                        fadeInDuration: Duration.zero,
-                        fadeOutDuration: Duration.zero,
-                        placeholder: (context, url) => Container(
-                          color: Colors.grey[200],
-                        ),
-                        errorWidget: (context, url, error) =>
-                            AppImages.placeholder(width: double.infinity),
-                      ),
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.black.withValues(alpha: 0.10),
-                        Colors.transparent,
-                        Colors.black.withValues(alpha: 0.50),
-                      ],
-                    ),
-                  ),
-                ),
-                Positioned(
-                  left: 56,
-                  right: 20,
-                  bottom: 16,
-                  child: Text(
-                    salon['name'] ?? '沙龙详情',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      shadows: [Shadow(blurRadius: 10, color: Colors.black54)],
-                    ),
-                  ),
-                ),
-              ],
+            foregroundColor: AppTheme.textDark,
+            surfaceTintColor: AppTheme.white,
+            title: Text(
+              '店铺详情',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
+            centerTitle: true,
           ),
           SliverToBoxAdapter(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (_adEnabled)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+                    child: AdCampaignBanner(imageUrl: _adImageUrl),
+                  ),
+                SizedBox(
+                  width: double.infinity,
+                  height: 127,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      coverImage.isEmpty
+                          ? AppImages.placeholder(width: double.infinity)
+                          : CachedNetworkImage(
+                              imageUrl: coverImage,
+                              fit: BoxFit.cover,
+                              alignment: Alignment.topCenter,
+                              memCacheWidth: 1100,
+                              filterQuality: FilterQuality.low,
+                              fadeInDuration: Duration.zero,
+                              fadeOutDuration: Duration.zero,
+                              placeholder: (context, url) =>
+                                  Container(color: Colors.grey[200]),
+                              errorWidget: (context, url, error) =>
+                                  AppImages.placeholder(width: double.infinity),
+                            ),
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.black.withValues(alpha: 0.03),
+                              Colors.black.withValues(alpha: 0.50),
+                            ],
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        left: 42,
+                        right: 17,
+                        bottom: 17,
+                        child: Text(
+                          salon['name'] ?? '沙龙详情',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            shadows: [
+                              Shadow(blurRadius: 6, color: Colors.black45),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
                 Padding(
                   padding: EdgeInsets.all(10),
                   child: Row(
@@ -369,6 +396,7 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
       context,
       MaterialPageRoute(
         builder: (context) => BookingScreen(
+          salonId: widget.salonId,
           initialStaffList: staffProfiles,
           initialServices: services,
           initialServiceId: initialServiceId,
@@ -935,6 +963,7 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
             MaterialPageRoute(
               builder: (context) => StaffDetailScreen(
                 staffId: profile.id,
+                salonId: widget.salonId,
                 staffProfile: profile,
                 allStaffInSalon: _list(salon['staff'])
                     .map((s) => _parseStaffProfile(s, salon['reviews']))
@@ -1035,6 +1064,13 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
     final note = data['note']?.toString() ?? '';
     final imageUrl = data['imageUrl']?.toString() ?? '';
     final serviceId = data['id']?.toString();
+    final rawTags = _list(data['tags']).isNotEmpty
+        ? _list(data['tags'])
+        : _list(data['categories']);
+    final tags = rawTags
+        .map((tag) => tag.toString().trim())
+        .where((tag) => tag.isNotEmpty)
+        .toList();
 
     return GestureDetector(
       onTap: serviceId == null
@@ -1072,6 +1108,32 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            if (tags.isNotEmpty) ...[
+                              Wrap(
+                                spacing: 4,
+                                runSpacing: 4,
+                                children: tags
+                                    .map(
+                                      (tag) => Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 1.5,
+                                        ),
+                                        color: const Color(0xFFFDE4EB),
+                                        child: Text(
+                                          tag,
+                                          style: const TextStyle(
+                                            color: Color(0xFFD06884),
+                                            fontSize: 12.5,
+                                            height: 1.28,
+                                          ),
+                                        ),
+                                      ),
+                                    )
+                                    .toList(),
+                              ),
+                              const SizedBox(height: 4),
+                            ],
                             Text(
                               data['name'] ?? '未知服务',
                               style: TextStyle(
@@ -1188,7 +1250,7 @@ class _SalonDetailImageCarouselState extends State<_SalonDetailImageCarousel> {
 
   @override
   Widget build(BuildContext context) {
-    final imageHeight = MediaQuery.sizeOf(context).width * 9 / 16 + 65;
+    final imageHeight = MediaQuery.sizeOf(context).width * 624 / 750;
 
     if (widget.images.length == 1) {
       return SizedBox(
