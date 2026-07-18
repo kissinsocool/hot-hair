@@ -9,12 +9,20 @@ import '../domain/booking_model.dart';
 import '../domain/staff_experience_formatter.dart';
 import '../domain/staff_model.dart';
 
+bool isClosedBookingDate(DateTime date, Iterable<String> closedDates) {
+  final dateKey = '${date.year.toString().padLeft(4, '0')}-'
+      '${date.month.toString().padLeft(2, '0')}-'
+      '${date.day.toString().padLeft(2, '0')}';
+  return closedDates.contains(dateKey);
+}
+
 class BookingScreen extends ConsumerStatefulWidget {
   final String salonId;
   final List<StaffProfile>? initialStaffList;
   final List<SalonService>? initialServices;
   final String? preferredStaffId;
   final String? initialServiceId;
+  final List<String> closedDates;
 
   const BookingScreen(
       {super.key,
@@ -22,7 +30,8 @@ class BookingScreen extends ConsumerStatefulWidget {
       this.initialStaffList,
       this.initialServices,
       this.preferredStaffId,
-      this.initialServiceId});
+      this.initialServiceId,
+      this.closedDates = const []});
 
   @override
   ConsumerState<BookingScreen> createState() => _BookingScreenState();
@@ -72,10 +81,15 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
       selectedStaffId = _noPreferenceStaffId;
     }
 
-    selectedDate = _generateWeekDates()[0];
+    for (final date in _generateWeekDates()) {
+      if (!_isClosedDate(date)) {
+        selectedDate = date;
+        break;
+      }
+    }
 
     Future.microtask(() {
-      ref.read(bookingProvider.notifier).setSalonId(widget.salonId);
+      ref.read(bookingProvider.notifier).resetForSalon(widget.salonId);
       if (selectedStaffId != null) {
         final staff = _staffOptions.firstWhere((s) => s.id == selectedStaffId);
         ref.read(bookingProvider.notifier).selectStaff(staff);
@@ -88,8 +102,10 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
           }
         }
       }
-      ref.read(bookingProvider.notifier).selectDate(selectedDate!);
-      _loadSlotsForDate(selectedDate!);
+      if (selectedDate != null) {
+        ref.read(bookingProvider.notifier).selectDate(selectedDate!);
+        _loadSlotsForDate(selectedDate!);
+      }
     });
   }
 
@@ -113,6 +129,9 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
     return List.generate(
         7, (i) => DateTime(today.year, today.month, today.day + i));
   }
+
+  bool _isClosedDate(DateTime date) =>
+      isClosedBookingDate(date, widget.closedDates);
 
   @override
   Widget build(BuildContext context) {
@@ -169,7 +188,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
                     color: AppTheme.textDark)),
             SizedBox(height: 15),
             SizedBox(
-              height: 80,
+              height: 96,
               child: ListView(
                 scrollDirection: Axis.horizontal,
                 children: _generateWeekDates()
@@ -190,6 +209,29 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
                 padding: EdgeInsets.symmetric(vertical: 10),
                 child: CircularProgressIndicator(color: AppTheme.primaryPink),
               ))
+            else if (bookingState.slotError.isNotEmpty)
+              Center(
+                child: Column(
+                  children: [
+                    Text(
+                      bookingState.slotError,
+                      style: TextStyle(color: Colors.grey[600]),
+                    ),
+                    if (selectedDate != null)
+                      TextButton(
+                        onPressed: () => _loadSlotsForDate(selectedDate!),
+                        child: Text('重新加载'),
+                      ),
+                  ],
+                ),
+              )
+            else if (bookingState.availableSlots.isEmpty)
+              Center(
+                child: Text(
+                  selectedDate == null ? '未来七天均为休息日' : '当天暂无可用时间段',
+                  style: TextStyle(color: Colors.grey[600]),
+                ),
+              )
             else
               Wrap(
                 spacing: 10,
@@ -249,6 +291,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
           height: 55,
           child: ElevatedButton(
             onPressed: (selectedStaffId != null &&
+                    selectedDate != null &&
                     bookingState.selectedService != null &&
                     selectedTimeSlot != null)
                 ? () => context.push(AppRouter.confirm)
@@ -261,9 +304,11 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
             child: Text(
               selectedStaffId == null
                   ? '请选择理发师'
-                  : (bookingState.selectedService == null
-                      ? '请选择服务项目'
-                      : (selectedTimeSlot == null ? '请选择时间段' : '确认预约')),
+                  : (selectedDate == null
+                      ? '请选择营业日期'
+                      : (bookingState.selectedService == null
+                          ? '请选择服务项目'
+                          : (selectedTimeSlot == null ? '请选择时间段' : '确认预约'))),
               style: TextStyle(
                   color: Colors.white,
                   fontSize: 18,
@@ -287,7 +332,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
         setState(() => selectedStaffId = staff.id);
         _clearSelectedTime();
         ref.read(bookingProvider.notifier).selectStaff(staff);
-        _loadSlotsForDate(selectedDate!);
+        if (selectedDate != null) _loadSlotsForDate(selectedDate!);
       },
       child: Container(
         margin: EdgeInsets.only(bottom: 6),
@@ -410,6 +455,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
   String _formatUnavailableReason(String? reason) {
     return switch (reason) {
       '理发师缺勤' => '缺勤',
+      '店铺休息日' => '休息',
       '已过' => '已过',
       _ => '已约',
     };
@@ -417,21 +463,32 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
 
   Widget _buildDateItem(DateTime date) {
     final isSelected = selectedDate == date;
+    final isClosed = _isClosedDate(date);
     return GestureDetector(
-      onTap: () {
-        setState(() => selectedDate = date);
-        _clearSelectedTime();
-        ref.read(bookingProvider.notifier).selectDate(date);
-        _loadSlotsForDate(selectedDate!);
-      },
+      onTap: isClosed
+          ? null
+          : () {
+              setState(() => selectedDate = date);
+              _clearSelectedTime();
+              ref.read(bookingProvider.notifier).selectDate(date);
+              _loadSlotsForDate(selectedDate!);
+            },
       child: Container(
         width: 60,
         margin: EdgeInsets.only(right: 5),
         decoration: BoxDecoration(
-          color: isSelected ? AppTheme.primaryPink : AppTheme.bgCream,
+          color: isClosed
+              ? Colors.grey[200]
+              : isSelected
+                  ? AppTheme.primaryPink
+                  : AppTheme.bgCream,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-              color: isSelected ? AppTheme.primaryPink : AppTheme.accentBeige),
+              color: isClosed
+                  ? Colors.grey[300]!
+                  : isSelected
+                      ? AppTheme.primaryPink
+                      : AppTheme.accentBeige),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -445,7 +502,18 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
                 style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: isSelected ? Colors.white : AppTheme.textDark)),
+                    color: isClosed
+                        ? Colors.grey
+                        : isSelected
+                            ? Colors.white
+                            : AppTheme.textDark)),
+            if (isClosed) ...[
+              SizedBox(height: 4),
+              Text(
+                '休息日',
+                style: TextStyle(fontSize: 10, color: Colors.grey[600]),
+              ),
+            ],
           ],
         ),
       ),

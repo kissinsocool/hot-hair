@@ -14,6 +14,7 @@ class StaffDetailScreen extends ConsumerStatefulWidget {
   final StaffProfile? staffProfile;
   final List<StaffProfile>? allStaffInSalon; // 新增：接收店铺所有理发师
   final List<SalonService>? initialServices;
+  final List<String> closedDates;
 
   const StaffDetailScreen({
     super.key,
@@ -22,6 +23,7 @@ class StaffDetailScreen extends ConsumerStatefulWidget {
     this.staffProfile,
     this.allStaffInSalon,
     this.initialServices,
+    this.closedDates = const [],
   });
 
   @override
@@ -34,6 +36,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
   List<StaffProfile>? _fetchedStaffInSalon;
   List<SalonService>? _fetchedServices;
   String? _fetchedSalonId;
+  List<String> _fetchedClosedDates = const [];
 
   @override
   void initState() {
@@ -72,6 +75,10 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
             ?.map((item) => _parseSalonService(Map<String, dynamic>.from(item)))
             .toList();
         _fetchedSalonId = data['salonId']?.toString();
+        _fetchedClosedDates = (data['salonClosedDates'] as List?)
+                ?.map((date) => date.toString())
+                .toList() ??
+            const [];
         _isLoading = false;
       });
     } catch (e) {
@@ -313,6 +320,9 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                             initialServices:
                                 widget.initialServices ?? _fetchedServices,
                             preferredStaffId: staff.id, // 默认选中当前理发师
+                            closedDates: widget.closedDates.isNotEmpty
+                                ? widget.closedDates
+                                : _fetchedClosedDates,
                           )));
             },
             style: ElevatedButton.styleFrom(

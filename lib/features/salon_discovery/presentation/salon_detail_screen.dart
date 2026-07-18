@@ -400,6 +400,9 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
           initialStaffList: staffProfiles,
           initialServices: services,
           initialServiceId: initialServiceId,
+          closedDates: _list(salon['closedDates'])
+              .map((date) => date.toString())
+              .toList(),
         ),
       ),
     );
@@ -970,6 +973,9 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
                     .toList(),
                 initialServices:
                     _list(salon['services']).map(_parseSalonService).toList(),
+                closedDates: _list(salon['closedDates'])
+                    .map((date) => date.toString())
+                    .toList(),
               ),
             ),
           );

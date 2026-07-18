@@ -1281,8 +1281,9 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
               if (remainCount <= 0) return;
 
               final picked = await ImagePicker().pickMultiImage(
-                maxWidth: 1600,
-                imageQuality: 70,
+                maxWidth: 1280,
+                maxHeight: 1280,
+                imageQuality: 35,
               );
               if (picked.isEmpty) return;
 
@@ -1324,6 +1325,12 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
                 if (!sheetContext.mounted) return;
                 Navigator.pop(sheetContext);
                 _showSnackBar('评价晒单已提交');
+              } on ReviewImageSizeException catch (e) {
+                if (!sheetContext.mounted) return;
+                setSheetState(() => isSubmitting = false);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(e.message)),
+                );
               } catch (e) {
                 if (!sheetContext.mounted) return;
                 setSheetState(() => isSubmitting = false);
@@ -1513,8 +1520,9 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
               if (remainCount <= 0) return;
 
               final picked = await ImagePicker().pickMultiImage(
-                maxWidth: 1600,
-                imageQuality: 70,
+                maxWidth: 1280,
+                maxHeight: 1280,
+                imageQuality: 35,
               );
               if (picked.isEmpty) return;
 
@@ -1548,6 +1556,12 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
                 if (!sheetContext.mounted) return;
                 Navigator.pop(sheetContext);
                 _showSnackBar('投诉已提交');
+              } on ReviewImageSizeException catch (e) {
+                if (!sheetContext.mounted) return;
+                setSheetState(() => isSubmitting = false);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(e.message)),
+                );
               } catch (_) {
                 if (!sheetContext.mounted) return;
                 setSheetState(() => isSubmitting = false);

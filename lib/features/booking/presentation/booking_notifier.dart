@@ -12,6 +12,7 @@ class BookingState {
   final String? selectedTime;
   final String salonId;
   final bool isLoading;
+  final String slotError;
 
   BookingState({
     this.availableSlots = const [],
@@ -21,6 +22,7 @@ class BookingState {
     this.selectedTime,
     this.salonId = '',
     this.isLoading = false,
+    this.slotError = '',
   });
 
   BookingState copyWith({
@@ -31,6 +33,7 @@ class BookingState {
     String? selectedTime,
     String? salonId,
     bool? isLoading,
+    String? slotError,
     bool clearSelectedTime = false,
   }) {
     return BookingState(
@@ -42,6 +45,7 @@ class BookingState {
           clearSelectedTime ? null : selectedTime ?? this.selectedTime,
       salonId: salonId ?? this.salonId,
       isLoading: isLoading ?? this.isLoading,
+      slotError: slotError ?? this.slotError,
     );
   }
 }
@@ -56,7 +60,15 @@ class BookingNotifier extends StateNotifier<BookingState> {
     String staffId, {
     String salonId = '',
   }) async {
-    state = state.copyWith(isLoading: true);
+    if (staffId == '__no_preference__' && salonId.isEmpty) {
+      state = state.copyWith(
+        availableSlots: const [],
+        isLoading: false,
+        slotError: '缺少门店信息，请返回门店详情后重新预约',
+      );
+      return;
+    }
+    state = state.copyWith(isLoading: true, slotError: '');
     try {
       final dateStr = date.toIso8601String().split('T')[0];
       final salonQuery = staffId == '__no_preference__'
@@ -79,9 +91,17 @@ class BookingNotifier extends StateNotifier<BookingState> {
         );
       }).toList();
 
-      state = state.copyWith(availableSlots: slots, isLoading: false);
+      state = state.copyWith(
+        availableSlots: slots,
+        isLoading: false,
+        slotError: '',
+      );
     } catch (e) {
-      state = state.copyWith(isLoading: false);
+      state = state.copyWith(
+        availableSlots: const [],
+        isLoading: false,
+        slotError: '可用时间段加载失败，请稍后重试',
+      );
     }
   }
 
@@ -107,6 +127,19 @@ class BookingNotifier extends StateNotifier<BookingState> {
 
   void clearSelectedTime() {
     state = state.copyWith(clearSelectedTime: true);
+  }
+
+  void clearAvailableSlots() {
+    state = state.copyWith(
+      availableSlots: const [],
+      isLoading: false,
+      slotError: '',
+      clearSelectedTime: true,
+    );
+  }
+
+  void resetForSalon(String salonId) {
+    state = BookingState(salonId: salonId);
   }
 
   Future<bool> confirmBooking(
