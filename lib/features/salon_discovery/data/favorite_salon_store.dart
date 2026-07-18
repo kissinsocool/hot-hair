@@ -6,6 +6,7 @@ class FavoriteSalonStore {
   FavoriteSalonStore._();
 
   static final ApiClient _apiClient = ApiClient();
+  static final Set<String> _pendingSalonIds = {};
 
   static final ValueNotifier<List<Map<String, dynamic>>> favorites =
       ValueNotifier<List<Map<String, dynamic>>>([]);
@@ -29,6 +30,7 @@ class FavoriteSalonStore {
 
   static Future<void> toggle(Map<String, dynamic> salon) async {
     final salonId = salon['id'].toString();
+    if (!_pendingSalonIds.add(salonId)) return;
     final previousFavorites = favorites.value;
     final nextFavorites = [...favorites.value];
     final index =
@@ -43,9 +45,8 @@ class FavoriteSalonStore {
     favorites.value = nextFavorites;
     try {
       final response = await _apiClient.request(
-        '/favorites/toggle',
-        method: 'POST',
-        data: salon,
+        '/favorites/${Uri.encodeComponent(salonId)}',
+        method: index >= 0 ? 'DELETE' : 'PUT',
       );
       if (response.data is List) {
         favorites.value = (response.data as List)
@@ -56,6 +57,8 @@ class FavoriteSalonStore {
     } catch (_) {
       favorites.value = previousFavorites;
       rethrow;
+    } finally {
+      _pendingSalonIds.remove(salonId);
     }
   }
 }

@@ -13,6 +13,11 @@ class ApiClient {
     sendTimeout: const Duration(seconds: 20),
     receiveTimeout: const Duration(seconds: 20),
   ));
+  final Dio _uploadDio = Dio(BaseOptions(
+    connectTimeout: const Duration(seconds: 10),
+    sendTimeout: const Duration(seconds: 30),
+    receiveTimeout: const Duration(seconds: 10),
+  ));
 
   static String get _apiBaseUrl {
     const configured = String.fromEnvironment('API_BASE_URL');
@@ -96,4 +101,7 @@ class ApiClient {
     }
     return items;
   }
+
+  Future<Response> uploadForm(String url, FormData data) =>
+      _uploadDio.post(url, data: data);
 }

@@ -20,16 +20,9 @@ class UserSessionStore {
     final preferences = await SharedPreferences.getInstance();
     final token = preferences.getString(_tokenKey);
     if (token == null || token.isEmpty) {
-      currentSession = const ClientAuthSession(
-        token: '',
-        user: ClientUser(
-          id: 'demo',
-          account: 'demo',
-          displayName: 'Demo 用户',
-          phone: 'demo',
-        ),
-      );
-      return currentSession;
+      currentSession = null;
+      ApiClient.authToken = null;
+      return null;
     }
 
     final session = ClientAuthSession(

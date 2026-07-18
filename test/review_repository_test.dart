@@ -2,45 +2,55 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hot_hair_app/features/booking/data/review_repository.dart';
+import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 
 void main() {
-  test('review images are encoded within per-file and total limits', () async {
-    final payload = await buildReviewImagePayload([
-      XFile.fromData(Uint8List(128),
-          name: 'review.jpg', mimeType: 'image/jpeg'),
+  test('review images are resized and encoded as quality-35 JPEG', () async {
+    final source = img.Image(width: 1600, height: 800);
+    img.fill(source, color: img.ColorRgb8(180, 80, 120));
+    final images = await prepareReviewImages([
+      XFile.fromData(
+        Uint8List.fromList(img.encodePng(source)),
+        name: 'review.png',
+        mimeType: 'image/png',
+      ),
     ]);
 
-    expect(payload.single['mimeType'], 'image/jpeg');
-    expect(payload.single['data'], isNotEmpty);
+    expect(images.single.contentType, 'image/jpeg');
+    expect(images.single.fileName, 'image.jpg');
+    final compressed = img.decodeJpg(images.single.bytes)!;
+    expect(compressed.width, reviewImageMaxDimension);
+    expect(compressed.height, 640);
+    expect(images.single.bytes.length, lessThan(reviewImageMaxBytes));
   });
 
-  test('review images over 800 kilobytes are rejected', () async {
+  test('invalid review images are rejected', () async {
     final image = XFile.fromData(
-      Uint8List(reviewImageMaxBytes + 1),
-      name: 'large.jpg',
+      Uint8List(128),
+      name: 'invalid.jpg',
       mimeType: 'image/jpeg',
     );
 
     await expectLater(
-      buildReviewImagePayload([image]),
+      prepareReviewImages([image]),
       throwsA(isA<ReviewImageSizeException>()),
     );
   });
 
-  test('review image payload over four megabytes is rejected', () async {
-    final images = List.generate(
-      5,
+  test('only five review images are prepared', () async {
+    final bytes = Uint8List.fromList(
+      img.encodeJpg(img.Image(width: 4, height: 4)),
+    );
+    final files = List.generate(
+      6,
       (index) => XFile.fromData(
-        Uint8List(900 * 1024),
+        bytes,
         name: 'review-$index.jpg',
         mimeType: 'image/jpeg',
       ),
     );
 
-    await expectLater(
-      buildReviewImagePayload(images),
-      throwsA(isA<ReviewImageSizeException>()),
-    );
+    expect(await prepareReviewImages(files), hasLength(5));
   });
 }

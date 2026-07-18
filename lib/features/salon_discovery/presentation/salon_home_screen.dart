@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:geolocator/geolocator.dart';
@@ -1283,7 +1284,6 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
               final picked = await ImagePicker().pickMultiImage(
                 maxWidth: 1280,
                 maxHeight: 1280,
-                imageQuality: 35,
               );
               if (picked.isEmpty) return;
 
@@ -1325,18 +1325,10 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
                 if (!sheetContext.mounted) return;
                 Navigator.pop(sheetContext);
                 _showSnackBar('评价晒单已提交');
-              } on ReviewImageSizeException catch (e) {
-                if (!sheetContext.mounted) return;
-                setSheetState(() => isSubmitting = false);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(e.message)),
-                );
               } catch (e) {
                 if (!sheetContext.mounted) return;
                 setSheetState(() => isSubmitting = false);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('提交失败，请稍后重试')),
-                );
+                await _showReviewSubmitError(sheetContext, e);
               }
             }
 
@@ -1522,7 +1514,6 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
               final picked = await ImagePicker().pickMultiImage(
                 maxWidth: 1280,
                 maxHeight: 1280,
-                imageQuality: 35,
               );
               if (picked.isEmpty) return;
 
@@ -1556,18 +1547,10 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
                 if (!sheetContext.mounted) return;
                 Navigator.pop(sheetContext);
                 _showSnackBar('投诉已提交');
-              } on ReviewImageSizeException catch (e) {
+              } catch (e) {
                 if (!sheetContext.mounted) return;
                 setSheetState(() => isSubmitting = false);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(e.message)),
-                );
-              } catch (_) {
-                if (!sheetContext.mounted) return;
-                setSheetState(() => isSubmitting = false);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('提交失败，请稍后重试')),
-                );
+                await _showReviewSubmitError(sheetContext, e);
               }
             }
 
@@ -1756,6 +1739,37 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
           ),
         ),
       ],
+    );
+  }
+
+  Future<void> _showReviewSubmitError(BuildContext context, Object error) {
+    var message = '提交失败，请稍后重试';
+    if (error is ReviewImageSizeException) {
+      message = error.message;
+    } else if (error is DioException) {
+      final data = error.response?.data;
+      if (error.response?.statusCode == 401) {
+        message = '登录已失效，请退出后重新登录';
+      } else if (data is Map && data['message'] != null) {
+        message = data['message'].toString();
+      } else if (error.type == DioExceptionType.connectionTimeout ||
+          error.type == DioExceptionType.sendTimeout ||
+          error.type == DioExceptionType.receiveTimeout) {
+        message = '图片上传超时，请检查网络后重试';
+      }
+    }
+    return showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('提交失败'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text('知道了'),
+          ),
+        ],
+      ),
     );
   }
 

@@ -1,11 +1,13 @@
-import 'dart:convert';
-
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
+import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/network/api_client.dart';
 
 const int reviewImageMaxBytes = 800 * 1024;
-const int reviewImagesMaxBytes = 4 * 1024 * 1024;
+const int reviewImageMaxDimension = 1280;
+const int reviewImageQuality = 35;
 
 class ReviewImageSizeException implements Exception {
   const ReviewImageSizeException(this.message);
@@ -13,29 +15,66 @@ class ReviewImageSizeException implements Exception {
   final String message;
 }
 
-Future<List<Map<String, String>>> buildReviewImagePayload(
+class PreparedReviewImage {
+  const PreparedReviewImage({
+    required this.fileName,
+    required this.contentType,
+    required this.bytes,
+  });
+
+  final String fileName;
+  final String contentType;
+  final Uint8List bytes;
+}
+
+Future<List<PreparedReviewImage>> prepareReviewImages(
   List<XFile> images,
 ) async {
-  final payload = <Map<String, String>>[];
-  var totalBytes = 0;
+  final prepared = <PreparedReviewImage>[];
 
   for (final image in images.take(5)) {
-    final bytes = await image.readAsBytes();
+    final bytes =
+        await compute(_compressReviewImage, await image.readAsBytes());
+    if (bytes.isEmpty) {
+      throw const ReviewImageSizeException('无法读取所选图片，请重新选择');
+    }
     if (bytes.length > reviewImageMaxBytes) {
       throw const ReviewImageSizeException('单张图片压缩后仍超过 800 KB，请重新选择');
     }
-    totalBytes += bytes.length;
-    if (totalBytes > reviewImagesMaxBytes) {
-      throw const ReviewImageSizeException('图片总大小不能超过 4 MB');
-    }
-    payload.add({
-      'fileName': image.name,
-      'mimeType': image.mimeType ?? 'image/jpeg',
-      'data': base64Encode(bytes),
-    });
+    final extensionIndex = image.name.lastIndexOf('.');
+    final baseName = extensionIndex > 0
+        ? image.name.substring(0, extensionIndex)
+        : image.name;
+    prepared.add(PreparedReviewImage(
+      fileName: '${baseName.isEmpty ? 'image' : baseName}.jpg',
+      contentType: 'image/jpeg',
+      bytes: bytes,
+    ));
   }
 
-  return payload;
+  return prepared;
+}
+
+Uint8List _compressReviewImage(Uint8List source) {
+  var image = img.decodeImage(source);
+  if (image == null) return Uint8List(0);
+  image = img.bakeOrientation(image);
+  if (image.width > reviewImageMaxDimension ||
+      image.height > reviewImageMaxDimension) {
+    image = image.width >= image.height
+        ? img.copyResize(image, width: reviewImageMaxDimension)
+        : img.copyResize(image, height: reviewImageMaxDimension);
+  }
+  final flattened = img.Image(
+    width: image.width,
+    height: image.height,
+    numChannels: 3,
+  );
+  img.fill(flattened, color: img.ColorRgb8(255, 255, 255));
+  img.compositeImage(flattened, image);
+  return Uint8List.fromList(
+    img.encodeJpg(flattened, quality: reviewImageQuality),
+  );
 }
 
 class ReviewRepository {
@@ -47,7 +86,7 @@ class ReviewRepository {
     required String comment,
     required List<XFile> images,
   }) async {
-    final imagePayload = await buildReviewImagePayload(images);
+    final imageObjects = await _uploadImages(images, 'review');
 
     await _apiClient.request(
       '/bookings/$bookingId/review',
@@ -55,7 +94,7 @@ class ReviewRepository {
       data: {
         'rating': rating,
         'comment': comment,
-        if (imagePayload.isNotEmpty) 'images': imagePayload,
+        if (imageObjects.isNotEmpty) 'imageObjects': imageObjects,
       },
     );
   }
@@ -65,15 +104,58 @@ class ReviewRepository {
     required String description,
     required List<XFile> images,
   }) async {
-    final imagePayload = await buildReviewImagePayload(images);
+    final imageObjects = await _uploadImages(images, 'complaint');
 
     await _apiClient.request(
       '/bookings/$bookingId/complaint',
       method: 'POST',
       data: {
         'description': description,
-        if (imagePayload.isNotEmpty) 'images': imagePayload,
+        if (imageObjects.isNotEmpty) 'imageObjects': imageObjects,
       },
     );
+  }
+
+  Future<List<String>> _uploadImages(List<XFile> images, String type) async {
+    final prepared = await prepareReviewImages(images);
+    if (prepared.isEmpty) return [];
+
+    final response = await _apiClient.request(
+      '/uploads/moderation/sign',
+      method: 'POST',
+      data: {
+        'type': type,
+        'files': prepared
+            .map((image) => {
+                  'fileName': image.fileName,
+                  'contentType': image.contentType,
+                  'size': image.bytes.length,
+                })
+            .toList(),
+      },
+    );
+    final uploads = (response.data['uploads'] as List?) ?? const [];
+    if (uploads.length != prepared.length) {
+      throw StateError('图片上传凭证数量不正确');
+    }
+
+    await Future.wait(List.generate(prepared.length, (index) {
+      final upload = Map<String, dynamic>.from(uploads[index] as Map);
+      final fields = Map<String, dynamic>.from(upload['fields'] as Map);
+      return _apiClient.uploadForm(
+        upload['uploadUrl'] as String,
+        FormData.fromMap({
+          ...fields,
+          'file': MultipartFile.fromBytes(
+            prepared[index].bytes,
+            filename: prepared[index].fileName,
+          ),
+        }),
+      );
+    }));
+
+    return uploads
+        .map((upload) => (upload as Map)['objectName'] as String)
+        .toList();
   }
 }
