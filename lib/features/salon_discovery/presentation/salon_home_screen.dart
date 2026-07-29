@@ -12,6 +12,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/network/router.dart';
+import '../../../core/widgets/coupon_ticket.dart';
 import '../../../core/widgets/top_snack_bar.dart';
 import '../../auth/data/user_auth_repository.dart';
 import '../../auth/data/user_session_store.dart';
@@ -35,6 +36,94 @@ class SalonHomeScreen extends StatefulWidget {
   State<SalonHomeScreen> createState() => _SalonHomeScreenState();
 }
 
+class _NoticeMarquee extends StatefulWidget {
+  const _NoticeMarquee();
+
+  static const message = '在服务过程中如果遇到强迫购买产品、升级项目、充值或办理会员卡等问题请第一时间向平台客服举报反馈！';
+
+  @override
+  State<_NoticeMarquee> createState() => _NoticeMarqueeState();
+}
+
+class _NoticeMarqueeState extends State<_NoticeMarquee> {
+  final ScrollController _controller = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scroll());
+  }
+
+  Future<void> _scroll() async {
+    while (mounted) {
+      await Future<void>.delayed(const Duration(seconds: 1));
+      if (!mounted ||
+          !_controller.hasClients ||
+          MediaQuery.disableAnimationsOf(context)) {
+        return;
+      }
+
+      final distance = _controller.position.maxScrollExtent;
+      if (distance <= 0) return;
+      await _controller.animateTo(
+        distance,
+        duration: Duration(milliseconds: (distance * 24).round()),
+        curve: Curves.linear,
+      );
+      if (_controller.hasClients) _controller.jumpTo(0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: _NoticeMarquee.message,
+      child: Container(
+        height: 36,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: AppTheme.primaryPink.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          children: [
+            const ExcludeSemantics(
+              child:
+                  Icon(Icons.campaign, color: AppTheme.primaryPink, size: 20),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: ExcludeSemantics(
+                child: SingleChildScrollView(
+                  controller: _controller,
+                  scrollDirection: Axis.horizontal,
+                  physics: const NeverScrollableScrollPhysics(),
+                  child: const Center(
+                    child: Text(
+                      _NoticeMarquee.message,
+                      maxLines: 1,
+                      style: TextStyle(
+                        color: Color(0xFFD06884),
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _SalonHomeScreenState extends State<SalonHomeScreen> {
   static bool _hasRequestedInitialLocationForSession = false;
   static Position? _cachedUserPosition;
@@ -51,19 +140,23 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
   final FocusNode _searchFocusNode = FocusNode();
   final LayerLink _searchFieldLayerLink = LayerLink();
   final GlobalKey _searchFieldKey = GlobalKey();
-  final TextEditingController _profileNameController = TextEditingController();
-  final TextEditingController _profilePhoneController = TextEditingController();
   final DateFormat _dateFormat = DateFormat('yyyy-MM-dd HH:mm');
   StreamSubscription<Map<String, dynamic>>? _bookingUpdateSubscription;
   OverlayEntry? _searchSuggestionsOverlay;
   int _selectedTabIndex = 0;
   bool _isLoading = true;
+  bool _isExploreScrolling = false;
   bool _hasBookingMessages = false;
-  String? _latestBookingMessageKey;
+  bool _ordersLoadFailed = false;
+  String? _bookingMessageStateKey;
   List<Map<String, dynamic>> _salons = [];
   int _visibleSalonCount = _salonPageSize;
   bool _salonsLoadedWithPosition = false;
   List<BookingOrder> _bookingOrders = [];
+  List<Map<String, dynamic>> _myReviews = [];
+  List<Map<String, dynamic>> _coupons = [];
+  bool _couponsLoading = true;
+  bool _couponsLoadFailed = false;
   List<Map<String, dynamic>> _searchSuggestionSalons = [];
   final Set<String> _reviewedOrderIds = {};
   final Set<String> _complainedOrderIds = {};
@@ -77,10 +170,6 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
   double _searchFieldWidth = 0;
   Position? _userPosition;
   String _locationMessage = '定位后按距离展示附近沙龙';
-  ClientAuthSession? _profileSession = UserSessionStore.currentSession;
-  String _profileGender = '保密';
-  String _profileAvatarUrl = '';
-  bool _isSavingProfile = false;
   bool _adEnabled = true;
   String _adImageUrl = '';
 
@@ -100,13 +189,14 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
   void initState() {
     super.initState();
     _searchFocusNode.addListener(_handleSearchFocusChanged);
-    _syncProfileControllers();
     _restoreCachedLocation();
     if (_userPosition != null) _loadSalons();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _locateUserOnceOnOpen();
     });
     _loadBookingMessageStatus();
+    _loadMyReviews();
+    _loadCoupons();
     _loadAdCampaign();
     BookingUpdateStream.instance.start();
     _bookingUpdateSubscription =
@@ -134,85 +224,24 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
     _removeSearchSuggestionsOverlay();
     _searchFocusNode.dispose();
     _searchController.dispose();
-    _profileNameController.dispose();
-    _profilePhoneController.dispose();
     super.dispose();
   }
 
-  void _syncProfileControllers() {
-    final user = _profileSession?.user;
-    _profileNameController.text = user?.displayName ?? '';
-    _profilePhoneController.text = user?.phone ?? user?.account ?? '';
-    _profileGender = user?.gender.isNotEmpty == true ? user!.gender : '保密';
-    _profileAvatarUrl = user?.avatarUrl ?? '';
-  }
-
   ImageProvider? _profileAvatarImage() {
-    if (_profileAvatarUrl.startsWith('data:image')) {
-      final commaIndex = _profileAvatarUrl.indexOf(',');
+    final avatarUrl = UserSessionStore.currentSession?.user.avatarUrl ?? '';
+    if (avatarUrl.startsWith('data:image')) {
+      final commaIndex = avatarUrl.indexOf(',');
       if (commaIndex == -1) return null;
       try {
-        return MemoryImage(
-            base64Decode(_profileAvatarUrl.substring(commaIndex + 1)));
+        return MemoryImage(base64Decode(avatarUrl.substring(commaIndex + 1)));
       } catch (_) {
         return null;
       }
     }
-    if (_profileAvatarUrl.isNotEmpty) {
-      return NetworkImage(_profileAvatarUrl);
+    if (avatarUrl.isNotEmpty) {
+      return NetworkImage(avatarUrl);
     }
     return null;
-  }
-
-  Future<void> _pickProfileAvatar() async {
-    final pickedImage = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 76,
-      maxWidth: 512,
-    );
-    if (pickedImage == null) return;
-
-    final bytes = await pickedImage.readAsBytes();
-    final lowerName = pickedImage.name.toLowerCase();
-    final mime = lowerName.endsWith('.png') ? 'image/png' : 'image/jpeg';
-    setState(() {
-      _profileAvatarUrl = 'data:$mime;base64,${base64Encode(bytes)}';
-    });
-  }
-
-  Future<void> _saveProfile() async {
-    final displayName = _profileNameController.text.trim();
-    final phone = _profilePhoneController.text.replaceAll(RegExp(r'\D'), '');
-    if (displayName.isEmpty) {
-      _showSnackBar('请输入昵称');
-      return;
-    }
-    if (!RegExp(r'^1\d{10}$').hasMatch(phone)) {
-      _showSnackBar('请输入有效的手机号');
-      return;
-    }
-
-    setState(() => _isSavingProfile = true);
-    try {
-      final session = await _authRepository.updateProfile(
-        displayName: displayName,
-        gender: _profileGender,
-        phone: phone,
-        avatarUrl: _profileAvatarUrl,
-      );
-      await UserSessionStore.save(session);
-      if (!mounted) return;
-      setState(() {
-        _profileSession = session;
-        _syncProfileControllers();
-      });
-      _showSnackBar('资料已保存');
-    } catch (error) {
-      if (!mounted) return;
-      _showSnackBar('保存失败，请稍后再试');
-    } finally {
-      if (mounted) setState(() => _isSavingProfile = false);
-    }
   }
 
   void _showSnackBar(String message) {
@@ -273,7 +302,8 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
       unawaited(_loadSalons());
       unawaited(_refreshCurrentAddress(position));
     } catch (error) {
-      final message = error.toString().replaceFirst('Exception: ', '');
+      debugPrint('首页定位失败: $error');
+      const message = '定位失败，请重试';
       _cachedUserPosition = null;
       _cachedLocationMessage = message;
       if (!mounted) return;
@@ -440,10 +470,10 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
         _visibleSalonCount = _salonPageSize;
         _isLoading = false;
       });
-    } catch (e) {
+    } catch (_) {
       if (!mounted || requestId != _salonRequestId) return;
       setState(() {
-        _errorMessage = e.toString();
+        _errorMessage = '糟糕，网络好像有点问题，请稍后重试';
         _isLoading = false;
       });
     }
@@ -693,18 +723,29 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
       final orders = await _orderRepository.fetchUserBookings();
       if (!mounted) return;
       setState(() {
-        _latestBookingMessageKey =
-            BookingMessageReadStore.latestMessageKey(orders);
+        _bookingMessageStateKey =
+            BookingMessageReadStore.messageStateKey(orders);
         _hasBookingMessages = BookingMessageReadStore.hasUnreadMessages(orders);
         _bookingOrders = orders;
+        _ordersLoadFailed = false;
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _latestBookingMessageKey = null;
+        _bookingMessageStateKey = null;
         _hasBookingMessages = false;
         _bookingOrders = [];
+        _ordersLoadFailed = true;
       });
+    }
+  }
+
+  Future<void> _loadMyReviews() async {
+    try {
+      final reviews = await _reviewRepository.fetchMyReviews();
+      if (mounted) setState(() => _myReviews = reviews);
+    } catch (_) {
+      if (mounted) setState(() => _myReviews = []);
     }
   }
 
@@ -715,7 +756,7 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
     }
 
     if (index == 2) {
-      unawaited(BookingMessageReadStore.markRead(_latestBookingMessageKey));
+      unawaited(BookingMessageReadStore.markRead(_bookingMessageStateKey));
       setState(() {
         _selectedTabIndex = index;
         _hasBookingMessages = false;
@@ -724,13 +765,15 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
       return;
     }
 
+    if (index == 3) unawaited(_loadCoupons());
+
     setState(() => _selectedTabIndex = index);
   }
 
   @override
   Widget build(BuildContext context) {
     final filteredSalons = _filteredSalons;
-    final titles = ['', '收藏', '我的订单', '我'];
+    final titles = ['', '收藏', '我的订单', '我的'];
 
     return Scaffold(
       backgroundColor: AppTheme.bgCream,
@@ -804,7 +847,7 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
           NavigationDestination(
             icon: Icon(Icons.person_outline),
             selectedIcon: Icon(Icons.person),
-            label: '我',
+            label: '我的',
           ),
         ],
       ),
@@ -816,16 +859,27 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
     final headerCount =
         _isLoading || _errorMessage.isNotEmpty || visibleSalons.isEmpty ? 1 : 0;
     final adCount = _adEnabled ? 1 : 0;
-    final itemCount = 2 + adCount + headerCount + visibleSalons.length;
+    final itemCount = 3 + adCount + headerCount + visibleSalons.length;
 
-    return Column(
+    return Stack(
       children: [
-        Expanded(
-          child: NotificationListener<ScrollEndNotification>(
+        Positioned.fill(
+          child: NotificationListener<ScrollNotification>(
             onNotification: (notification) {
-              if (notification.metrics.extentAfter == 0 &&
-                  _visibleSalonCount < filteredSalons.length) {
-                setState(() => _visibleSalonCount += _salonPageSize);
+              if (notification.metrics.axis != Axis.vertical) return false;
+
+              if (notification is ScrollStartNotification &&
+                  !_isExploreScrolling) {
+                setState(() => _isExploreScrolling = true);
+              } else if (notification is ScrollEndNotification) {
+                final loadMore = notification.metrics.extentAfter == 0 &&
+                    _visibleSalonCount < filteredSalons.length;
+                if (_isExploreScrolling || loadMore) {
+                  setState(() {
+                    _isExploreScrolling = false;
+                    if (loadMore) _visibleSalonCount += _salonPageSize;
+                  });
+                }
               }
               return false;
             },
@@ -843,15 +897,21 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
                 }
                 index -= adCount;
                 if (index == 0) {
+                  return const Padding(
+                    padding: EdgeInsets.only(bottom: 11),
+                    child: _NoticeMarquee(),
+                  );
+                }
+                if (index == 1) {
                   return Text(_salonsLoadedWithPosition ? '附近的店铺' : '推荐沙龙',
                       style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
                           color: AppTheme.textDark));
                 }
-                if (index == 1) return SizedBox(height: 15);
+                if (index == 2) return SizedBox(height: 15);
 
-                final contentIndex = index - 2;
+                final contentIndex = index - 3;
                 if (_isLoading) {
                   return Center(
                       child: CircularProgressIndicator(
@@ -861,7 +921,7 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
                   return Center(
                     child: Column(
                       children: [
-                        Text('加载失败: $_errorMessage',
+                        Text(_errorMessage,
                             style: TextStyle(color: Colors.red)),
                         TextButton(onPressed: _loadSalons, child: Text('重新加载'))
                       ],
@@ -872,6 +932,43 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
 
                 return _buildSalonCard(visibleSalons[contentIndex], context);
               },
+            ),
+          ),
+        ),
+        Align(
+          alignment: Alignment.centerRight,
+          child: AnimatedSlide(
+            offset: _isExploreScrolling ? const Offset(2 / 3, 0) : Offset.zero,
+            duration: const Duration(milliseconds: 240),
+            curve: Curves.easeOut,
+            child: AnimatedOpacity(
+              opacity: _isExploreScrolling ? 1 / 3 : 0.8,
+              duration: const Duration(milliseconds: 240),
+              child: IgnorePointer(
+                ignoring: _isExploreScrolling,
+                child: Semantics(
+                  label: '平台客服',
+                  button: true,
+                  child: Material(
+                    elevation: 4,
+                    color: AppTheme.white,
+                    borderRadius: BorderRadius.circular(12),
+                    clipBehavior: Clip.antiAlias,
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () => context.push(AppRouter.support),
+                      child: const SizedBox.square(
+                        dimension: 48,
+                        child: Icon(
+                          Icons.support_agent,
+                          color: AppTheme.primaryPink,
+                          size: 30,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
             ),
           ),
         ),
@@ -1022,6 +1119,9 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
   }
 
   Widget _buildOrdersTab() {
+    if (_ordersLoadFailed) {
+      return _buildRequestError(_loadBookingMessageStatus);
+    }
     if (_bookingOrders.isEmpty) {
       return _buildEmptyTab(
         Icons.receipt_long_outlined,
@@ -1044,6 +1144,9 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
     return ValueListenableBuilder<List<Map<String, dynamic>>>(
       valueListenable: FavoriteSalonStore.favorites,
       builder: (context, favorites, _) {
+        if (FavoriteSalonStore.loadFailed) {
+          return _buildRequestError(FavoriteSalonStore.load);
+        }
         if (favorites.isEmpty) {
           return _buildEmptyTab(
             Icons.favorite_border,
@@ -1129,6 +1232,15 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
             SizedBox(height: 6),
             _buildOrderInfoRow(
                 Icons.schedule, _dateFormat.format(order.startTime)),
+            if (order.couponDiscountFen > 0) ...[
+              SizedBox(height: 6),
+              _buildOrderInfoRow(
+                Icons.local_activity_outlined,
+                '${order.couponTitle}，优惠'
+                ' ¥${(order.couponDiscountFen / 100).toStringAsFixed(2)}，'
+                '到店支付 ¥${(order.payableAmountFen / 100).toStringAsFixed(2)}',
+              ),
+            ],
             if (canReview || canCancel) ...[
               SizedBox(height: 14),
               if (canReview)
@@ -1261,10 +1373,69 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
     }
   }
 
-  Future<void> _showReviewSheet(BookingOrder order) async {
-    final reviewController = TextEditingController();
-    int rating = 0;
+  Future<void> _showReviewSheet(BookingOrder order) => _showReviewEditor(
+        bookingId: order.id,
+        salonName: order.salonName,
+        serviceName: order.serviceName,
+        onSubmit: (rating, comment, retainedImageUrls, images) =>
+            _reviewRepository.submitReview(
+          bookingId: order.id,
+          rating: rating,
+          comment: comment,
+          images: images,
+        ),
+      );
+
+  Future<void> _showEditReviewSheet(Map<String, dynamic> review) {
+    final imageUrls = ((review['imageUrls'] as List?) ?? const [])
+        .map((value) => value.toString())
+        .toList();
+    final imageKeys = ((review['imageKeys'] as List?) ?? const [])
+        .map((value) => value.toString())
+        .toList();
+    return _showReviewEditor(
+      bookingId: review['bookingId']?.toString() ?? '',
+      salonName: review['salonName']?.toString() ?? '',
+      serviceName: review['serviceName']?.toString() ?? '',
+      initialRating: (review['rating'] as num?)?.toInt() ?? 0,
+      initialComment: review['comment']?.toString() ?? '',
+      initialImageUrls: imageUrls,
+      initialImageKeys: imageKeys,
+      isEditing: true,
+      onSubmit: (rating, comment, retainedImageUrls, images) =>
+          _reviewRepository.updateReview(
+        bookingId: review['bookingId']?.toString() ?? '',
+        rating: rating,
+        comment: comment,
+        retainedImageUrls: retainedImageUrls,
+        images: images,
+      ),
+    );
+  }
+
+  Future<void> _showReviewEditor({
+    required String bookingId,
+    required String salonName,
+    required String serviceName,
+    required Future<void> Function(
+      int rating,
+      String comment,
+      List<String> retainedImageUrls,
+      List<XFile> images,
+    ) onSubmit,
+    int initialRating = 0,
+    String initialComment = '',
+    List<String> initialImageUrls = const [],
+    List<String> initialImageKeys = const [],
+    bool isEditing = false,
+  }) async {
+    final reviewController = TextEditingController(text: initialComment);
+    int rating = initialRating;
     List<XFile> images = [];
+    final retainedImages = List.generate(
+      initialImageUrls.length.clamp(0, initialImageKeys.length),
+      (index) => MapEntry(initialImageKeys[index], initialImageUrls[index]),
+    );
     bool isSubmitting = false;
 
     await showModalBottomSheet<void>(
@@ -1278,7 +1449,7 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
         return StatefulBuilder(
           builder: (context, setSheetState) {
             Future<void> pickImages() async {
-              final remainCount = 5 - images.length;
+              final remainCount = 5 - retainedImages.length - images.length;
               if (remainCount <= 0) return;
 
               final picked = await ImagePicker().pickMultiImage(
@@ -1313,18 +1484,19 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
 
               setSheetState(() => isSubmitting = true);
               try {
-                await _reviewRepository.submitReview(
-                  bookingId: order.id,
-                  rating: rating,
-                  comment: reviewController.text.trim(),
-                  images: images,
+                await onSubmit(
+                  rating,
+                  reviewController.text.trim(),
+                  retainedImages.map((image) => image.key).toList(),
+                  images,
                 );
                 if (!mounted) return;
-                setState(() => _reviewedOrderIds.add(order.id));
+                setState(() => _reviewedOrderIds.add(bookingId));
                 await _loadBookingMessageStatus();
+                await _loadMyReviews();
                 if (!sheetContext.mounted) return;
                 Navigator.pop(sheetContext);
-                _showSnackBar('评价晒单已提交');
+                _showSnackBar(isEditing ? '评价修改已提交审核' : '评价晒单已提交');
               } catch (e) {
                 if (!sheetContext.mounted) return;
                 setSheetState(() => isSubmitting = false);
@@ -1350,7 +1522,7 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
                         children: [
                           Expanded(
                             child: Text(
-                              '评价晒单',
+                              isEditing ? '编辑评价' : '评价晒单',
                               style: TextStyle(
                                 color: AppTheme.textDark,
                                 fontSize: 20,
@@ -1366,9 +1538,9 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
                         ],
                       ),
                       SizedBox(height: 8),
-                      _buildOrderInfoRow(Icons.storefront, order.salonName),
+                      _buildOrderInfoRow(Icons.storefront, salonName),
                       SizedBox(height: 6),
-                      _buildOrderInfoRow(Icons.content_cut, order.serviceName),
+                      _buildOrderInfoRow(Icons.content_cut, serviceName),
                       SizedBox(height: 18),
                       Text(
                         '选择星级',
@@ -1423,7 +1595,7 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
                         children: [
                           Expanded(
                             child: Text(
-                              '上传图片 ${images.length}/5',
+                              '上传图片 ${retainedImages.length + images.length}/5',
                               style: TextStyle(
                                 color: AppTheme.textDark,
                                 fontWeight: FontWeight.bold,
@@ -1431,26 +1603,35 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
                             ),
                           ),
                           TextButton.icon(
-                            onPressed: images.length >= 5 ? null : pickImages,
+                            onPressed:
+                                retainedImages.length + images.length >= 5
+                                    ? null
+                                    : pickImages,
                             icon: Icon(Icons.add_photo_alternate_outlined),
                             label: Text('选择图片'),
                           ),
                         ],
                       ),
-                      if (images.isNotEmpty) ...[
+                      if (retainedImages.isNotEmpty || images.isNotEmpty) ...[
                         SizedBox(height: 8),
                         Wrap(
                           spacing: 8,
                           runSpacing: 8,
-                          children: images
-                              .map(
-                                (image) => _buildPickedImageTile(
-                                  image,
-                                  () =>
-                                      setSheetState(() => images.remove(image)),
-                                ),
-                              )
-                              .toList(),
+                          children: [
+                            ...retainedImages.map(
+                              (image) => _buildExistingReviewImageTile(
+                                image.value,
+                                () => setSheetState(
+                                    () => retainedImages.remove(image)),
+                              ),
+                            ),
+                            ...images.map(
+                              (image) => _buildPickedImageTile(
+                                image,
+                                () => setSheetState(() => images.remove(image)),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                       SizedBox(height: 20),
@@ -1469,7 +1650,13 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
                                   ),
                                 )
                               : Icon(Icons.send),
-                          label: Text(isSubmitting ? '提交中...' : '提交评价'),
+                          label: Text(
+                            isSubmitting
+                                ? '提交中...'
+                                : isEditing
+                                    ? '提交修改'
+                                    : '提交评价',
+                          ),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppTheme.primaryPink,
                             foregroundColor: AppTheme.white,
@@ -1742,6 +1929,39 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
     );
   }
 
+  Widget _buildExistingReviewImageTile(String url, VoidCallback onRemove) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: CachedNetworkImage(
+            imageUrl: url,
+            width: 72,
+            height: 72,
+            fit: BoxFit.cover,
+          ),
+        ),
+        Positioned(
+          top: -8,
+          right: -8,
+          child: InkWell(
+            onTap: onRemove,
+            child: Container(
+              width: 22,
+              height: 22,
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.7),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.close, size: 15, color: Colors.white),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Future<void> _showReviewSubmitError(BuildContext context, Object error) {
     var message = '提交失败，请稍后重试';
     if (error is ReviewImageSizeException) {
@@ -1787,166 +2007,403 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
 
   Widget _buildProfileTab() {
     final avatarImage = _profileAvatarImage();
+    final displayName =
+        UserSessionStore.currentSession?.user.displayName.trim() ?? '';
+    final account = UserSessionStore.currentSession?.user.account ?? '';
 
-    return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(10, 14, 10, 56),
+    return DefaultTabController(
+      length: 2,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Center(
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                CircleAvatar(
-                  radius: 44,
-                  backgroundColor: AppTheme.primaryPink.withOpacity(0.18),
-                  backgroundImage: avatarImage,
-                  child: avatarImage == null
-                      ? Icon(
-                          Icons.person,
-                          color: AppTheme.primaryPink,
-                          size: 46,
-                        )
-                      : null,
-                ),
-                Positioned(
-                  right: -2,
-                  bottom: -2,
-                  child: Material(
-                    color: AppTheme.primaryPink,
-                    shape: CircleBorder(),
-                    child: InkWell(
-                      customBorder: CircleBorder(),
-                      onTap: _pickProfileAvatar,
-                      child: Padding(
-                        padding: EdgeInsets.all(4.5),
-                        child: Icon(
-                          Icons.photo_camera_outlined,
-                          color: AppTheme.white,
-                          size: 18,
-                        ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 14, 12, 12),
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppTheme.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppTheme.accentBeige),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 16,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: AppTheme.primaryPink.withOpacity(0.35),
+                        width: 1.5,
                       ),
                     ),
+                    child: CircleAvatar(
+                      radius: 31,
+                      backgroundColor: AppTheme.primaryPink.withOpacity(0.14),
+                      backgroundImage: avatarImage,
+                      child: avatarImage == null
+                          ? const Icon(
+                              Icons.person,
+                              color: AppTheme.primaryPink,
+                              size: 32,
+                            )
+                          : null,
+                    ),
                   ),
-                ),
-              ],
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          displayName.isNotEmpty
+                              ? displayName
+                              : account.isEmpty
+                                  ? '未登录账号'
+                                  : account,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppTheme.textDark,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                          ),
+                        ),
+                        const SizedBox(height: 7),
+                        TextButton.icon(
+                          onPressed: () async {
+                            await context.push(AppRouter.userProfile);
+                            if (mounted) setState(() {});
+                          },
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.grey[600],
+                            padding: EdgeInsets.zero,
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            textStyle: const TextStyle(fontSize: 12),
+                          ),
+                          iconAlignment: IconAlignment.end,
+                          icon: const Icon(Icons.chevron_right, size: 15),
+                          label: const Text('账号设置'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-          SizedBox(height: 18),
-          Text(
-            _profileNameController.text.trim().isEmpty
-                ? '完善个人资料'
-                : _profileNameController.text.trim(),
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: AppTheme.textDark,
-              fontWeight: FontWeight.bold,
-              fontSize: 20,
-            ),
-          ),
-          SizedBox(height: 6),
-          Text(
-            '管理预约、收藏和个人资料',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey[600]),
-          ),
-          SizedBox(height: 24),
           Container(
-            padding: EdgeInsets.all(9),
+            margin: const EdgeInsets.symmetric(horizontal: 12),
+            padding: const EdgeInsets.all(4),
             decoration: BoxDecoration(
               color: AppTheme.white,
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(12),
               border: Border.all(color: AppTheme.accentBeige),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.04),
-                  blurRadius: 12,
-                  offset: Offset(0, 4),
-                ),
+            ),
+            child: TabBar(
+              dividerColor: Colors.transparent,
+              indicatorSize: TabBarIndicatorSize.tab,
+              indicator: BoxDecoration(
+                color: AppTheme.primaryPink.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(9),
+              ),
+              labelColor: AppTheme.primaryPink,
+              unselectedLabelColor: Colors.grey[600],
+              labelStyle: const TextStyle(fontWeight: FontWeight.bold),
+              tabs: const [
+                Tab(text: '优惠券'),
+                Tab(text: '我的评价'),
               ],
             ),
-            child: Column(
+          ),
+          const SizedBox(height: 4),
+          Expanded(
+            child: TabBarView(
               children: [
-                TextField(
-                  controller: _profileNameController,
-                  textInputAction: TextInputAction.next,
-                  onChanged: (_) => setState(() {}),
-                  decoration: InputDecoration(
-                    labelText: '昵称',
-                    prefixIcon: Icon(Icons.badge_outlined),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                ),
-                SizedBox(height: 14),
-                DropdownButtonFormField<String>(
-                  initialValue: _profileGender,
-                  items: const ['保密', '男', '女', '其他']
-                      .map(
-                        (gender) => DropdownMenuItem(
-                          value: gender,
-                          child: Text(gender),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) {
-                    if (value == null) return;
-                    setState(() => _profileGender = value);
-                  },
-                  decoration: InputDecoration(
-                    labelText: '性别',
-                    prefixIcon: Icon(Icons.wc_outlined),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                ),
-                SizedBox(height: 14),
-                TextField(
-                  controller: _profilePhoneController,
-                  keyboardType: TextInputType.phone,
-                  textInputAction: TextInputAction.done,
-                  decoration: InputDecoration(
-                    labelText: '电话号码',
-                    prefixIcon: Icon(Icons.phone_iphone_outlined),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                ),
-                SizedBox(height: 18),
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: ElevatedButton.icon(
-                    onPressed: _isSavingProfile ? null : _saveProfile,
-                    icon: _isSavingProfile
-                        ? SizedBox(
-                            width: 18,
-                            height: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: AppTheme.white,
-                            ),
-                          )
-                        : Icon(Icons.save_outlined),
-                    label: Text(_isSavingProfile ? '保存中' : '保存资料'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppTheme.primaryPink,
-                      foregroundColor: AppTheme.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                ),
+                _buildCouponsTab(),
+                _buildMyReviewsTab(),
               ],
             ),
           ),
         ],
       ),
     );
+  }
+
+  Future<void> _loadCoupons() async {
+    if (UserSessionStore.currentSession == null) {
+      if (mounted) {
+        setState(() {
+          _coupons = [];
+          _couponsLoading = false;
+          _couponsLoadFailed = false;
+        });
+      }
+      return;
+    }
+    try {
+      final coupons = await _authRepository.fetchCoupons();
+      if (!mounted) return;
+      setState(() {
+        _coupons = coupons;
+        _couponsLoading = false;
+        _couponsLoadFailed = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _couponsLoading = false;
+        _couponsLoadFailed = true;
+      });
+    }
+  }
+
+  Widget _buildCouponsTab() {
+    if (_couponsLoading) {
+      return const Center(
+        child: CircularProgressIndicator(color: AppTheme.primaryPink),
+      );
+    }
+    if (_couponsLoadFailed) return _buildRequestError(_loadCoupons);
+    if (_coupons.isEmpty) {
+      return _buildEmptyTab(
+        Icons.confirmation_number_outlined,
+        '暂无优惠券',
+        '活动期间注册后，优惠券会显示在这里',
+      );
+    }
+    return RefreshIndicator(
+      color: AppTheme.primaryPink,
+      onRefresh: _loadCoupons,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
+        children:
+            _coupons.map((coupon) => CouponTicket(coupon: coupon)).toList(),
+      ),
+    );
+  }
+
+  Widget _buildMyReviewsTab() {
+    if (_myReviews.isEmpty) {
+      return _buildEmptyTab(
+        Icons.rate_review_outlined,
+        '暂无评价',
+        '完成服务并评价后会显示在这里',
+      );
+    }
+
+    return RefreshIndicator(
+      color: AppTheme.primaryPink,
+      onRefresh: _loadMyReviews,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(10, 10, 10, 14),
+        children: _myReviews.map(_buildMyReviewCard).toList(),
+      ),
+    );
+  }
+
+  Widget _buildMyReviewCard(Map<String, dynamic> review) {
+    final rating = (review['rating'] as num?)?.toInt() ?? 0;
+    final bookingId = review['bookingId']?.toString() ?? '';
+    final reviewStatus = review['reviewStatus']?.toString() ?? '';
+    final editStatus = review['editStatus']?.toString() ?? '';
+    final isAwaitingReview =
+        reviewStatus == 'pending' || editStatus == 'pending';
+    final imageUrls = ((review['imageUrls'] as List?) ?? const [])
+        .map((url) => url.toString())
+        .where((url) => url.isNotEmpty)
+        .toList();
+    final reply = review['merchantReply'];
+    final replyText = reply is Map
+        ? reply['content']?.toString() ?? ''
+        : reply?.toString() ?? '';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.accentBeige),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.025),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  review['salonName']?.toString() ?? '',
+                  style: const TextStyle(
+                    color: AppTheme.textDark,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+              Text(
+                review['date']?.toString() ?? '',
+                style: TextStyle(color: Colors.grey[500], fontSize: 12),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            [review['serviceName'], review['staffName']]
+                .map((value) => value?.toString() ?? '')
+                .where((value) => value.isNotEmpty)
+                .join(' · '),
+            style: TextStyle(color: Colors.grey[600], fontSize: 13),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: List.generate(
+              5,
+              (index) => Icon(
+                index < rating ? Icons.star : Icons.star_border,
+                color: Colors.amber,
+                size: 18,
+              ),
+            ),
+          ),
+          if ((review['comment']?.toString() ?? '').isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(review['comment'].toString()),
+          ],
+          if (imageUrls.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: imageUrls
+                  .map((url) => ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: CachedNetworkImage(
+                          imageUrl: url,
+                          width: 72,
+                          height: 72,
+                          fit: BoxFit.cover,
+                        ),
+                      ))
+                  .toList(),
+            ),
+          ],
+          if (replyText.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppTheme.bgCream,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                '商家回复：$replyText',
+                style: TextStyle(color: Colors.grey[700], height: 1.4),
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          const Divider(height: 1),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: bookingId.isEmpty || isAwaitingReview
+                      ? null
+                      : () => _showEditReviewSheet(review),
+                  icon: const Icon(Icons.edit_outlined, size: 17),
+                  label: Text(
+                    editStatus == 'pending'
+                        ? '修改审核中'
+                        : reviewStatus == 'pending'
+                            ? '评价审核中'
+                            : '编辑',
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.primaryPink,
+                    side: const BorderSide(color: AppTheme.primaryPink),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: bookingId.isEmpty
+                      ? null
+                      : () => _confirmDeleteReview(review),
+                  icon: const Icon(Icons.delete_outline, size: 17),
+                  label: const Text('删除'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.redAccent,
+                    side: const BorderSide(color: Colors.redAccent),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _confirmDeleteReview(Map<String, dynamic> review) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppTheme.white,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: const Text('删除评价'),
+        content: const Text('删除后无法恢复，确定要删除这条评价吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            style: TextButton.styleFrom(foregroundColor: Colors.grey[600]),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: AppTheme.white,
+            ),
+            child: const Text('确认删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await _reviewRepository.deleteReview(review['bookingId'].toString());
+      await Future.wait([_loadMyReviews(), _loadBookingMessageStatus()]);
+      if (mounted) _showSnackBar('评价已删除');
+    } catch (error) {
+      if (mounted) await _showReviewSubmitError(context, error);
+    }
   }
 
   Widget _buildEmptyTab(IconData icon, String title, String subtitle) {
@@ -1974,6 +2431,18 @@ class _SalonHomeScreenState extends State<SalonHomeScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildRequestError(Future<void> Function() onRetry) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text('糟糕，网络好像有点问题，请稍后重试'),
+          TextButton(onPressed: onRetry, child: const Text('重新加载')),
+        ],
       ),
     );
   }

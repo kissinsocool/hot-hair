@@ -16,6 +16,18 @@ bool isClosedBookingDate(DateTime date, Iterable<String> closedDates) {
   return closedDates.contains(dateKey);
 }
 
+bool isSameDayBookingDateUnavailable(
+  DateTime date,
+  bool acceptsSameDayBooking, {
+  DateTime? now,
+}) {
+  final today = now ?? DateTime.now();
+  return !acceptsSameDayBooking &&
+      date.year == today.year &&
+      date.month == today.month &&
+      date.day == today.day;
+}
+
 class BookingScreen extends ConsumerStatefulWidget {
   final String salonId;
   final List<StaffProfile>? initialStaffList;
@@ -23,6 +35,7 @@ class BookingScreen extends ConsumerStatefulWidget {
   final String? preferredStaffId;
   final String? initialServiceId;
   final List<String> closedDates;
+  final bool acceptsSameDayBooking;
 
   const BookingScreen(
       {super.key,
@@ -31,7 +44,8 @@ class BookingScreen extends ConsumerStatefulWidget {
       this.initialServices,
       this.preferredStaffId,
       this.initialServiceId,
-      this.closedDates = const []});
+      this.closedDates = const [],
+      this.acceptsSameDayBooking = true});
 
   @override
   ConsumerState<BookingScreen> createState() => _BookingScreenState();
@@ -82,7 +96,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
     }
 
     for (final date in _generateWeekDates()) {
-      if (!_isClosedDate(date)) {
+      if (!_isUnavailableDate(date)) {
         selectedDate = date;
         break;
       }
@@ -132,6 +146,12 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
 
   bool _isClosedDate(DateTime date) =>
       isClosedBookingDate(date, widget.closedDates);
+
+  bool _isSameDayUnavailable(DateTime date) =>
+      isSameDayBookingDateUnavailable(date, widget.acceptsSameDayBooking);
+
+  bool _isUnavailableDate(DateTime date) =>
+      _isClosedDate(date) || _isSameDayUnavailable(date);
 
   @override
   Widget build(BuildContext context) {
@@ -464,8 +484,9 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
   Widget _buildDateItem(DateTime date) {
     final isSelected = selectedDate == date;
     final isClosed = _isClosedDate(date);
+    final isUnavailable = isClosed || _isSameDayUnavailable(date);
     return GestureDetector(
-      onTap: isClosed
+      onTap: isUnavailable
           ? null
           : () {
               setState(() => selectedDate = date);
@@ -477,14 +498,14 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
         width: 60,
         margin: EdgeInsets.only(right: 5),
         decoration: BoxDecoration(
-          color: isClosed
+          color: isUnavailable
               ? Colors.grey[200]
               : isSelected
                   ? AppTheme.primaryPink
                   : AppTheme.bgCream,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-              color: isClosed
+              color: isUnavailable
                   ? Colors.grey[300]!
                   : isSelected
                       ? AppTheme.primaryPink
@@ -502,7 +523,7 @@ class _BookingScreenState extends ConsumerState<BookingScreen> {
                 style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: isClosed
+                    color: isUnavailable
                         ? Colors.grey
                         : isSelected
                             ? Colors.white

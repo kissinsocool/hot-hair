@@ -80,6 +80,11 @@ Uint8List _compressReviewImage(Uint8List source) {
 class ReviewRepository {
   final ApiClient _apiClient = ApiClient();
 
+  Future<List<Map<String, dynamic>>> fetchMyReviews() async {
+    final data = await _apiClient.requestAllPages('/auth/reviews');
+    return data.map((item) => Map<String, dynamic>.from(item as Map)).toList();
+  }
+
   Future<void> submitReview({
     required String bookingId,
     required int rating,
@@ -96,6 +101,33 @@ class ReviewRepository {
         'comment': comment,
         if (imageObjects.isNotEmpty) 'imageObjects': imageObjects,
       },
+    );
+  }
+
+  Future<void> updateReview({
+    required String bookingId,
+    required int rating,
+    required String comment,
+    required List<String> retainedImageUrls,
+    required List<XFile> images,
+  }) async {
+    final imageObjects = await _uploadImages(images, 'review');
+    await _apiClient.request(
+      '/bookings/$bookingId/review',
+      method: 'PATCH',
+      data: {
+        'rating': rating,
+        'comment': comment,
+        'retainedImageUrls': retainedImageUrls,
+        if (imageObjects.isNotEmpty) 'imageObjects': imageObjects,
+      },
+    );
+  }
+
+  Future<void> deleteReview(String bookingId) async {
+    await _apiClient.request(
+      '/bookings/$bookingId/review',
+      method: 'DELETE',
     );
   }
 

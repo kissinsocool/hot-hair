@@ -59,6 +59,13 @@ class ApiClient {
     return host == 'localhost' || host == '127.0.0.1' || host == '0.0.0.0';
   }
 
+  static String errorMessage(Object error, {required String fallback}) {
+    if (error is DioException && error.response?.statusCode == 429) {
+      return '操作频繁，请稍后再试';
+    }
+    return fallback;
+  }
+
   // 统一请求处理，方便以后添加 Token 验证
   Future<Response> request(String path,
       {String method = 'GET',

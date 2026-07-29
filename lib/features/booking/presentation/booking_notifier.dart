@@ -100,7 +100,7 @@ class BookingNotifier extends StateNotifier<BookingState> {
       state = state.copyWith(
         availableSlots: const [],
         isLoading: false,
-        slotError: '可用时间段加载失败，请稍后重试',
+        slotError: ApiClient.errorMessage(e, fallback: '可用时间段加载失败，请稍后重试'),
       );
     }
   }
@@ -145,8 +145,9 @@ class BookingNotifier extends StateNotifier<BookingState> {
   Future<bool> confirmBooking(
     String staffId,
     String serviceId,
-    String time,
-  ) async {
+    String time, {
+    String couponId = '',
+  }) async {
     if (state.selectedDate == null) return false;
 
     final parts = time.split(':');
@@ -166,6 +167,7 @@ class BookingNotifier extends StateNotifier<BookingState> {
       salonId: state.salonId,
       serviceId: serviceId,
       startTime: startTime,
+      couponId: couponId,
     );
     return booking != null;
   }
@@ -175,6 +177,7 @@ class BookingNotifier extends StateNotifier<BookingState> {
     required String salonId,
     required String serviceId,
     required DateTime startTime,
+    String couponId = '',
   }) async {
     try {
       final response = await _apiClient.request(
@@ -185,6 +188,7 @@ class BookingNotifier extends StateNotifier<BookingState> {
           'salonId': salonId,
           'serviceId': serviceId,
           'startTime': startTime.toIso8601String(),
+          if (couponId.isNotEmpty) 'couponId': couponId,
         },
       );
       if (response.statusCode == 201) {

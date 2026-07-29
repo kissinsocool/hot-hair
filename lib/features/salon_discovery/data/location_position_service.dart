@@ -54,17 +54,25 @@ class LocationPositionService {
     }
 
     _configureAmap();
+    Object? amapError;
     for (var attempt = 0; attempt < 2; attempt++) {
       try {
         return await _currentAmapPosition();
-      } catch (_) {
-        if (attempt == 1) rethrow;
+      } catch (error) {
+        amapError = error;
+        if (attempt == 1) break;
         // ponytail: Android AMap can miss right after permission grant; one retry mirrors the manual re-locate path.
         await Future<void>.delayed(const Duration(milliseconds: 300));
       }
     }
 
-    throw Exception('定位失败，请重试');
+    debugPrint('高德定位失败，切换系统定位: $amapError');
+    return Geolocator.getCurrentPosition(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        timeLimit: Duration(seconds: 8),
+      ),
+    );
   }
 
   static Future<Position> _currentAmapPosition() async {

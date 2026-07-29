@@ -44,8 +44,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/salon_placeholder.svg
-    - assets/images/auth_hero.png
-    - assets/images/ad.jpeg
+    - assets/images/logo.png
     - assets/images/ad/
     - assets/icons/
     - assets/icons_png/

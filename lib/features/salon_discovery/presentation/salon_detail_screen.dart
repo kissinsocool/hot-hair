@@ -3,6 +3,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../../core/network/api_client.dart';
 import '../../../features/booking/presentation/booking_screen.dart';
 import '../../../features/booking/domain/booking_model.dart';
 import '../data/favorite_salon_store.dart';
@@ -64,7 +65,7 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
       });
     } catch (e) {
       setState(() {
-        _errorMessage = e.toString();
+        _errorMessage = ApiClient.errorMessage(e, fallback: '门店详情加载失败，请稍后重试');
         _isLoading = false;
       });
     }
@@ -403,6 +404,7 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
           closedDates: _list(salon['closedDates'])
               .map((date) => date.toString())
               .toList(),
+          acceptsSameDayBooking: salon['acceptsSameDayBooking'] != false,
         ),
       ),
     );
@@ -976,6 +978,7 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
                 closedDates: _list(salon['closedDates'])
                     .map((date) => date.toString())
                     .toList(),
+                acceptsSameDayBooking: salon['acceptsSameDayBooking'] != false,
               ),
             ),
           );
@@ -1163,23 +1166,27 @@ class _SalonDetailScreenState extends State<SalonDetailScreen> {
                         ),
                       ),
                       SizedBox(width: 12),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            data['duration'] ?? '',
-                            style: TextStyle(color: Colors.grey, fontSize: 13),
-                          ),
-                          SizedBox(height: 8),
-                          Text(
-                            data['price'] ?? '免费',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                              color: AppTheme.primaryPink,
+                      SizedBox(
+                        height: 101,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              data['price'] ?? '免费',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                color: AppTheme.primaryPink,
+                              ),
                             ),
-                          ),
-                        ],
+                            Text(
+                              data['duration'] ?? '',
+                              style:
+                                  TextStyle(color: Colors.grey, fontSize: 13),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),

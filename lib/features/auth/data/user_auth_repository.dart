@@ -1,3 +1,6 @@
+import 'package:dio/dio.dart';
+import 'package:image_picker/image_picker.dart';
+
 import '../../../core/network/api_client.dart';
 
 class ClientUser {
@@ -51,6 +54,39 @@ class ClientAuthSession {
 
 class UserAuthRepository {
   final ApiClient _apiClient = ApiClient();
+
+  Future<String> uploadAvatar(XFile image) async {
+    final bytes = await image.readAsBytes();
+    final lowerName = image.name.toLowerCase();
+    final contentType = lowerName.endsWith('.png')
+        ? 'image/png'
+        : lowerName.endsWith('.webp')
+            ? 'image/webp'
+            : 'image/jpeg';
+    final response = await _apiClient.request(
+      '/uploads/avatar/sign',
+      method: 'POST',
+      data: {
+        'files': [
+          {
+            'fileName': image.name,
+            'contentType': contentType,
+            'size': bytes.length,
+          },
+        ],
+      },
+    );
+    final upload = Map<String, dynamic>.from(response.data['upload'] as Map);
+    final fields = Map<String, dynamic>.from(upload['fields'] as Map);
+    await _apiClient.uploadForm(
+      upload['uploadUrl'] as String,
+      FormData.fromMap({
+        ...fields,
+        'file': MultipartFile.fromBytes(bytes, filename: image.name),
+      }),
+    );
+    return upload['url'] as String;
+  }
 
   Future<String?> requestSmsCode({required String phone}) async {
     final response = await _apiClient.request(
@@ -126,6 +162,13 @@ class UserAuthRepository {
       },
     );
     return _sessionFromResponse(Map<String, dynamic>.from(response.data));
+  }
+
+  Future<List<Map<String, dynamic>>> fetchCoupons() async {
+    final response = await _apiClient.request('/auth/coupons');
+    return (response.data as List)
+        .map((item) => Map<String, dynamic>.from(item as Map))
+        .toList();
   }
 
   ClientAuthSession _sessionFromResponse(Map<String, dynamic> data) {

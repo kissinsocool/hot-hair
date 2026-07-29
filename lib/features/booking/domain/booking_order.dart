@@ -12,6 +12,9 @@ class BookingOrder {
   final int serviceBasePrice;
   final int staffExtraServiceFee;
   final int totalPrice;
+  final String couponTitle;
+  final int couponDiscountFen;
+  final int payableAmountFen;
   final DateTime startTime;
   final String status;
   final String statusLabel;
@@ -37,6 +40,9 @@ class BookingOrder {
     this.serviceBasePrice = 0,
     this.staffExtraServiceFee = 0,
     this.totalPrice = 0,
+    this.couponTitle = '',
+    this.couponDiscountFen = 0,
+    this.payableAmountFen = 0,
     required this.startTime,
     required this.status,
     required this.statusLabel,
@@ -64,6 +70,9 @@ class BookingOrder {
       serviceBasePrice: _parseInt(json['serviceBasePrice']),
       staffExtraServiceFee: _parseInt(json['staffExtraServiceFee']),
       totalPrice: _parseInt(json['totalPrice']),
+      couponTitle: json['couponTitle']?.toString() ?? '',
+      couponDiscountFen: _parseInt(json['couponDiscountFen']),
+      payableAmountFen: _parseInt(json['payableAmountFen']),
       startTime: DateTime.parse(json['startTime'] as String).toLocal(),
       status: json['status'] as String,
       statusLabel: json['statusLabel'] as String? ?? json['status'] as String,

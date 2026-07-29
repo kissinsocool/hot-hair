@@ -8,4 +8,26 @@ void main() {
     expect(isClosedBookingDate(DateTime(2026, 7, 18), closedDates), isTrue);
     expect(isClosedBookingDate(DateTime(2026, 7, 19), closedDates), isFalse);
   });
+
+  test('same-day booking policy disables today without making it a closed date',
+      () {
+    final today = DateTime(2026, 7, 20);
+
+    expect(
+      isSameDayBookingDateUnavailable(today, false, now: today),
+      isTrue,
+    );
+    expect(
+      isSameDayBookingDateUnavailable(today, true, now: today),
+      isFalse,
+    );
+    expect(
+      isSameDayBookingDateUnavailable(
+        DateTime(2026, 7, 21),
+        false,
+        now: today,
+      ),
+      isFalse,
+    );
+  });
 }

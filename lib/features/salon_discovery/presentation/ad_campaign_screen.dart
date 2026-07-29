@@ -18,22 +18,23 @@ class AdCampaignBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final image = imageUrl.isEmpty
-        ? Image.asset('assets/images/ad.jpeg', fit: BoxFit.cover)
-        : CachedNetworkImage(
-            imageUrl: imageUrl,
-            fit: BoxFit.cover,
-            placeholder: (context, url) => const ColoredBox(color: _border),
-            errorWidget: (context, url, error) =>
-                Image.asset('assets/images/ad.jpeg', fit: BoxFit.cover),
-          );
+    if (imageUrl.isEmpty) return const SizedBox.shrink();
 
     return Semantics(
       button: true,
       label: '查看 2026 首尔发型趋势',
       child: InkWell(
         onTap: () => context.push(AppRouter.adCampaign),
-        child: SizedBox(width: double.infinity, height: 71, child: image),
+        child: SizedBox(
+          width: double.infinity,
+          height: 71,
+          child: CachedNetworkImage(
+            imageUrl: imageUrl,
+            fit: BoxFit.cover,
+            placeholder: (context, url) => const SizedBox.shrink(),
+            errorWidget: (context, url, error) => const SizedBox.shrink(),
+          ),
+        ),
       ),
     );
   }

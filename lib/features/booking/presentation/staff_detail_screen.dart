@@ -15,6 +15,7 @@ class StaffDetailScreen extends ConsumerStatefulWidget {
   final List<StaffProfile>? allStaffInSalon; // 新增：接收店铺所有理发师
   final List<SalonService>? initialServices;
   final List<String> closedDates;
+  final bool acceptsSameDayBooking;
 
   const StaffDetailScreen({
     super.key,
@@ -24,6 +25,7 @@ class StaffDetailScreen extends ConsumerStatefulWidget {
     this.allStaffInSalon,
     this.initialServices,
     this.closedDates = const [],
+    this.acceptsSameDayBooking = true,
   });
 
   @override
@@ -37,6 +39,7 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
   List<SalonService>? _fetchedServices;
   String? _fetchedSalonId;
   List<String> _fetchedClosedDates = const [];
+  bool _fetchedAcceptsSameDayBooking = true;
 
   @override
   void initState() {
@@ -79,13 +82,15 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                 ?.map((date) => date.toString())
                 .toList() ??
             const [];
+        _fetchedAcceptsSameDayBooking =
+            data['salonAcceptsSameDayBooking'] != false;
         _isLoading = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('加载理发师详情失败')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(ApiClient.errorMessage(e, fallback: '加载理发师详情失败'))));
     }
   }
 
@@ -323,6 +328,9 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
                             closedDates: widget.closedDates.isNotEmpty
                                 ? widget.closedDates
                                 : _fetchedClosedDates,
+                            acceptsSameDayBooking:
+                                widget.acceptsSameDayBooking &&
+                                    _fetchedAcceptsSameDayBooking,
                           )));
             },
             style: ElevatedButton.styleFrom(
@@ -376,18 +384,22 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
               runSpacing: 8,
               children: review.imageUrls
                   .map(
-                    (url) => ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.network(
-                        url,
-                        width: 72,
-                        height: 72,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => Container(
+                    (url) => GestureDetector(
+                      onTap: () => _showReviewImage(context, url),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.network(
+                          url,
                           width: 72,
                           height: 72,
-                          color: Colors.grey[200],
-                          child: AppImages.placeholder(width: 72, height: 72),
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) =>
+                              Container(
+                            width: 72,
+                            height: 72,
+                            color: Colors.grey[200],
+                            child: AppImages.placeholder(width: 72, height: 72),
+                          ),
                         ),
                       ),
                     ),
@@ -436,6 +448,43 @@ class _StaffDetailScreenState extends ConsumerState<StaffDetailScreen> {
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  void _showReviewImage(BuildContext context, String url) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => Dialog.fullscreen(
+        backgroundColor: Colors.black,
+        child: Stack(
+          children: [
+            Center(
+              child: InteractiveViewer(
+                minScale: 0.8,
+                maxScale: 4,
+                child: Image.network(
+                  url,
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) => Icon(
+                    Icons.image_not_supported,
+                    color: Colors.white70,
+                    size: 48,
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              top: MediaQuery.paddingOf(context).top + 8,
+              right: 8,
+              child: IconButton(
+                tooltip: '关闭',
+                onPressed: () => Navigator.pop(context),
+                icon: Icon(Icons.close, color: Colors.white),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

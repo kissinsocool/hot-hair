@@ -59,7 +59,7 @@ class _UserBookingMessagesScreenState extends State<UserBookingMessagesScreen> {
       final orders = await _repository.fetchUserBookings();
       if (!mounted) return;
       await BookingMessageReadStore.markRead(
-        BookingMessageReadStore.latestMessageKey(orders),
+        BookingMessageReadStore.messageStateKey(orders),
       );
       setState(() {
         _orders = orders;

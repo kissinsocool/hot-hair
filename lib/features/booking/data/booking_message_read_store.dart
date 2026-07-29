@@ -11,17 +11,16 @@ class BookingMessageReadStore {
     _readMessageKey = preferences.getString(_readMessageKeyKey);
   }
 
-  static String? latestMessageKey(List<BookingOrder> orders) {
+  static String? messageStateKey(List<BookingOrder> orders) {
     if (orders.isEmpty) return null;
 
-    final sortedOrders = [...orders]
-      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-    final latest = sortedOrders.first;
-    return '${latest.id}:${latest.status}:${latest.updatedAt.toIso8601String()}';
+    final messageStates =
+        orders.map((order) => '${order.id}:${order.status}').toList()..sort();
+    return messageStates.join('|');
   }
 
   static bool hasUnreadMessages(List<BookingOrder> orders) {
-    final key = latestMessageKey(orders);
+    final key = messageStateKey(orders);
     return key != null && key != _readMessageKey;
   }
 

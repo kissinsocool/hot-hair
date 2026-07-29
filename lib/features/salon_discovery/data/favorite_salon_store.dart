@@ -7,6 +7,7 @@ class FavoriteSalonStore {
 
   static final ApiClient _apiClient = ApiClient();
   static final Set<String> _pendingSalonIds = {};
+  static bool loadFailed = false;
 
   static final ValueNotifier<List<Map<String, dynamic>>> favorites =
       ValueNotifier<List<Map<String, dynamic>>>([]);
@@ -15,11 +16,13 @@ class FavoriteSalonStore {
     try {
       final response = await _apiClient.request('/favorites');
       if (response.data is! List) return;
+      loadFailed = false;
       favorites.value = (response.data as List)
           .whereType<Map>()
           .map((salon) => Map<String, dynamic>.from(salon))
           .toList();
     } catch (_) {
+      loadFailed = true;
       favorites.value = [];
     }
   }

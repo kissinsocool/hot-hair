@@ -158,7 +158,7 @@ class _AuthScreenState extends State<AuthScreen> {
       child: Stack(
         children: [
           Image.asset(
-            'assets/images/auth_hero.png',
+            'assets/images/logo.png',
             height: 260,
             width: double.infinity,
             fit: BoxFit.cover,
